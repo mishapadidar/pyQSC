@@ -5,8 +5,11 @@ and computing diagnostics of the O(r^1) solution.
 
 import logging
 import numpy as np
+import torch
 from .util import fourier_minimum
 from .newton import newton
+from torch.autograd.functional import jacobian
+from functools import partial
 
 #logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -17,13 +20,14 @@ def _residual(self, x):
     the state vector, corresponding to sigma on the phi grid,
     except that the first element of x is actually iota.
     """
-    sigma = np.copy(x)
+    sigma = torch.clone(x)
     sigma[0] = self.sigma0
     iota = x[0]
-    r = np.matmul(self.d_d_varphi, sigma) \
+    r = torch.matmul(self.d_d_varphi, sigma) \
         + (iota + self.helicity * self.nfp) * \
         (self.etabar_squared_over_curvature_squared * self.etabar_squared_over_curvature_squared + 1 + sigma * sigma) \
         - 2 * self.etabar_squared_over_curvature_squared * (-self.spsi * self.torsion + self.I2 / self.B0) * self.G0 / self.B0
+    
     #logger.debug("_residual called with x={}, r={}".format(x, r))
     return r
 
@@ -33,13 +37,13 @@ def _jacobian(self, x):
     the state vector, corresponding to sigma on the phi grid,
     except that the first element of x is actually iota.
     """
-    sigma = np.copy(x)
+    sigma = torch.clone(x)
     sigma[0] = self.sigma0
     iota = x[0]
 
     # d (Riccati equation) / d sigma:
     # For convenience we will fill all the columns now, and re-write the first column in a moment.
-    jac = np.copy(self.d_d_varphi)
+    jac = torch.clone(self.d_d_varphi)
     for j in range(self.nphi):
         jac[j, j] += (iota + self.helicity * self.nfp) * 2 * sigma[j]
 
@@ -53,18 +57,73 @@ def solve_sigma_equation(self):
     """
     Solve the sigma equation.
     """
-    x0 = np.full(self.nphi, self.sigma0)
+    x0 = torch.tensor(np.full(self.nphi, self.sigma0))
     x0[0] = 0 # Initial guess for iota
     """
     soln = scipy.optimize.root(self._residual, x0, jac=self._jacobian, method='lm')
     self.iota = soln.x[0]
-    self.sigma = np.copy(soln.x)
+    self.sigma = torch.clone(soln.x)
     self.sigma[0] = self.sigma0
     """
-    self.sigma = newton(self._residual, x0, jac=self._jacobian)
-    self.iota = self.sigma[0]
+    sol = newton(self._residual, x0, jac=self._jacobian) 
+    # don't track sigma/iota with autograd
+    self.sigma = torch.clone(sol).detach()
+    self.iota = torch.clone(sol[0]).detach()
     self.iotaN = self.iota + self.helicity * self.nfp
     self.sigma[0] = self.sigma0
+
+
+def dresidual_by_ddof_vjp(self, v):
+    """
+    Differentiate the system
+        r(z(x), x) = 0
+    w.r.t x. The derivative system at a solution is,
+        dr/dz * dz/dx = - dr/dx,
+    where we aim to solve for the jacobian dz/dx. For optimization we only need know,
+        transpose(dz/dx) * v
+    for a probe vector v, so we solve for this instead. This has the added benefit of 
+    playing well with torch vector jacobian products.
+    
+    The solution to the derivative system is,
+            dz/dx = - inv(dr/dz) * dr/dx.
+    Transposing the system and right-multiplying by a vector v of len(r),
+        transpose(dz/dx) * v = - transpose(dr/dx) * inv(tranpose(dr/dz)) * v.
+    If we define lambda via,
+        tranpose(dr/dz) * lambda = - v,                           (1)
+    then we can write our solution as, 
+        transpose(dz/dx) * v = transpose(dr/dx) * lambda.         (2)
+    Hence computing the derivative has two steps: solve (1) for lambda, use autodiff to
+    compute transpose(dr/dx) * lambda with (2).
+
+    For our problem, z(x) is the function
+        z(x) = [iota(x), sigma_1(x), ..., sigma_nphi(x)],
+    since sigma_0 is a fixed value. The structure of v should match accordingly. For use in 
+    computing derivatives of an optimization objective, J(z(x), x), set v = dJ/dz. Specifically,
+    for our problem use 
+        v = [dJ/diota, dJ/dsigma_1, ..., dJ/dsigma_nphi].
+
+    Args:
+        v (tensor): tensor of same length as sigma (number of residuals)
+    
+    Return:
+        dsigma_by_ddofs (tuple): tuple of derivatives, one entry for each DOF. Each 
+    """
+    x = torch.clone(self.sigma)
+    x[0] = self.iota
+
+    # solve (1) for lambda (adjoint)
+    dr_by_dsigma = self._jacobian(x)
+    _lambda = torch.linalg.solve(dr_by_dsigma.T, - v)
+
+    # use autodiff to compute transpose(dr/dx) * lambda
+    r = self._residual(x)
+    dofs = self.get_dofs(as_tuple=True)
+    dsigma_iota_vjp_by_ddofs = torch.autograd.grad(r, dofs, grad_outputs=_lambda, retain_graph=True, allow_unused=True) # tuple
+    
+    # TODO: zero out the grads?
+    # self.zero_grads(dofs)
+
+    return dsigma_iota_vjp_by_ddofs
 
 def _determine_helicity(self):
     """
@@ -72,7 +131,7 @@ def _determine_helicity(self):
     by counting the number of times the normal vector rotates
     poloidally as you follow the axis around toroidally.
     """
-    quadrant = np.zeros(self.nphi + 1)
+    quadrant = torch.zeros(self.nphi + 1)
     for j in range(self.nphi):
         if self.normal_cylindrical[j,0] >= 0:
             if self.normal_cylindrical[j,2] >= 0:
@@ -119,8 +178,8 @@ def r1_diagnostics(self):
         self.Y1c_untwisted = self.Y1c
     else:
         angle = -self.helicity * self.nfp * self.varphi
-        sinangle = np.sin(angle)
-        cosangle = np.cos(angle)
+        sinangle = torch.sin(angle)
+        cosangle = torch.cos(angle)
         self.X1s_untwisted = self.X1s *   cosangle  + self.X1c * sinangle
         self.X1c_untwisted = self.X1s * (-sinangle) + self.X1c * cosangle
         self.Y1s_untwisted = self.Y1s *   cosangle  + self.Y1c * sinangle
@@ -130,15 +189,15 @@ def r1_diagnostics(self):
     # or use (X,Y) for elongation in the plane perpendicular to the magnetic axis.
     p = self.X1s * self.X1s + self.X1c * self.X1c + self.Y1s * self.Y1s + self.Y1c * self.Y1c
     q = self.X1s * self.Y1c - self.X1c * self.Y1s
-    self.elongation = (p + np.sqrt(p * p - 4 * q * q)) / (2 * np.abs(q))
-    self.mean_elongation = np.sum(self.elongation * self.d_l_d_phi) / np.sum(self.d_l_d_phi)
-    index = np.argmax(self.elongation)
-    self.max_elongation = -fourier_minimum(-self.elongation)
+    self.elongation = (p + torch.sqrt(p * p - 4 * q * q)) / (2 * torch.abs(q))
+    self.mean_elongation = torch.sum(self.elongation * self.d_l_d_phi) / torch.sum(self.d_l_d_phi)
+    index = torch.argmax(self.elongation)
+    self.max_elongation = -fourier_minimum(-self.elongation.detach().numpy())
 
-    self.d_X1c_d_varphi = np.matmul(self.d_d_varphi, self.X1c)
-    self.d_X1s_d_varphi = np.matmul(self.d_d_varphi, self.X1s)
-    self.d_Y1s_d_varphi = np.matmul(self.d_d_varphi, self.Y1s)
-    self.d_Y1c_d_varphi = np.matmul(self.d_d_varphi, self.Y1c)
+    self.d_X1c_d_varphi = torch.matmul(self.d_d_varphi, self.X1c)
+    self.d_X1s_d_varphi = torch.matmul(self.d_d_varphi, self.X1s)
+    self.d_Y1s_d_varphi = torch.matmul(self.d_d_varphi, self.Y1s)
+    self.d_Y1c_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c)
 
     self.calculate_grad_B_tensor()
 

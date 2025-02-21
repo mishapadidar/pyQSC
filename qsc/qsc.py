@@ -7,11 +7,13 @@ import logging
 import numpy as np
 from scipy.io import netcdf
 #from numba import jit
+import torch
+import numpy as np
 
 #logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-class Qsc():
+class Qsc(torch.nn.Module):
     """
     This is the main class for representing the quasisymmetric
     stellarator construction.
@@ -20,7 +22,7 @@ class Qsc():
     # Import methods that are defined in separate files:
     from .init_axis import init_axis, convert_to_spline
     from .calculate_r1 import _residual, _jacobian, solve_sigma_equation, \
-        _determine_helicity, r1_diagnostics
+        _determine_helicity, r1_diagnostics, dresidual_by_ddof_vjp
     from .grad_B_tensor import calculate_grad_B_tensor, calculate_grad_grad_B_tensor, \
         Bfield_cylindrical, Bfield_cartesian, grad_B_tensor_cartesian, \
         grad_grad_B_tensor_cylindrical, grad_grad_B_tensor_cartesian
@@ -39,18 +41,28 @@ class Qsc():
         """
         Create a quasisymmetric stellarator.
         """
+        super().__init__()
+
+        # TODO: only modify the classes datatype.
+        # set 64-bit default
+        torch.set_default_dtype(torch.float64)
+
         # First, force {rc, zs, rs, zc} to have the same length, for
         # simplicity.
-        nfourier = np.max([len(rc), len(zs), len(rs), len(zc)])
+        nfourier = torch.max(torch.tensor([len(rc), len(zs), len(rs), len(zc)]))
         self.nfourier = nfourier
-        self.rc = np.zeros(nfourier)
-        self.zs = np.zeros(nfourier)
-        self.rs = np.zeros(nfourier)
-        self.zc = np.zeros(nfourier)
-        self.rc[:len(rc)] = rc
-        self.zs[:len(zs)] = zs
-        self.rs[:len(rs)] = rs
-        self.zc[:len(zc)] = zc
+        self.rc = torch.nn.Parameter(torch.zeros(nfourier), requires_grad=True)
+        self.zs = torch.nn.Parameter(torch.zeros(nfourier), requires_grad=True)
+        self.rs = torch.nn.Parameter(torch.zeros(nfourier), requires_grad=True)
+        self.zc = torch.nn.Parameter(torch.zeros(nfourier), requires_grad=True)
+        # self.rc = torch.zeros(nfourier, requires_grad=True)
+        # self.zs = torch.zeros(nfourier, requires_grad=True)
+        # self.rs = torch.zeros(nfourier, requires_grad=True)
+        # self.zc = torch.zeros(nfourier, requires_grad=True)
+        self.rc[:len(rc)].data += torch.tensor(rc)
+        self.zs[:len(zs)].data += torch.tensor(zs)
+        self.rs[:len(rs)].data += torch.tensor(rs)
+        self.zc[:len(zc)].data += torch.tensor(zc)
 
         # Force nphi to be odd:
         if np.mod(nphi, 2) == 0:
@@ -63,47 +75,47 @@ class Qsc():
             raise ValueError('spsi must be +1 or -1')
 
         self.nfp = nfp
-        self.etabar = etabar
-        self.sigma0 = sigma0
-        self.B0 = B0
-        self.I2 = I2
+        self.etabar = torch.nn.Parameter(torch.tensor(etabar), requires_grad=True)
+        self.B2c = torch.nn.Parameter(torch.tensor(B2c), requires_grad=True)
+        self.B2s = torch.nn.Parameter(torch.tensor(B2s), requires_grad=True)
+        self.sigma0 =  sigma0
+        self.B0 =  B0
+        self.I2 =  I2
+        self.p2 =  p2
         self.sG = sG
         self.spsi = spsi
         self.nphi = nphi
-        self.B2s = B2s
-        self.B2c = B2c
-        self.p2 = p2
         self.order = order
         self.min_R0_threshold = 0.3
         self._set_names()
 
         self.calculate()
 
-    def change_nfourier(self, nfourier_new):
-        """
-        Resize the arrays of Fourier amplitudes. You can either increase
-        or decrease nfourier.
-        """
-        rc_old = self.rc
-        rs_old = self.rs
-        zc_old = self.zc
-        zs_old = self.zs
-        index = np.min((self.nfourier, nfourier_new))
-        self.rc = np.zeros(nfourier_new)
-        self.rs = np.zeros(nfourier_new)
-        self.zc = np.zeros(nfourier_new)
-        self.zs = np.zeros(nfourier_new)
-        self.rc[:index] = rc_old[:index]
-        self.rs[:index] = rs_old[:index]
-        self.zc[:index] = zc_old[:index]
-        self.zs[:index] = zs_old[:index]
-        nfourier_old = self.nfourier
-        self.nfourier = nfourier_new
-        self._set_names()
-        # No need to recalculate if we increased the Fourier
-        # resolution, only if we decreased it.
-        if nfourier_new < nfourier_old:
-            self.calculate()
+    # def change_nfourier(self, nfourier_new):
+    #     """
+    #     Resize the arrays of Fourier amplitudes. You can either increase
+    #     or decrease nfourier.
+    #     """
+    #     rc_old = self.rc
+    #     rs_old = self.rs
+    #     zc_old = self.zc
+    #     zs_old = self.zs
+    #     index = torch.min(torch.tensor([self.nfourier, nfourier_new]))
+    #     self.rc = torch.zeros(nfourier_new, requires_grad=True)
+    #     self.rs = torch.zeros(nfourier_new, requires_grad=True)
+    #     self.zc = torch.zeros(nfourier_new, requires_grad=True)
+    #     self.zs = torch.zeros(nfourier_new, requires_grad=True)
+    #     self.rc[:index] = rc_old[:index]
+    #     self.rs[:index] = rs_old[:index]
+    #     self.zc[:index] = zc_old[:index]
+    #     self.zs[:index] = zs_old[:index]
+    #     nfourier_old = self.nfourier
+    #     self.nfourier = nfourier_new
+    #     self._set_names()
+    #     # No need to recalculate if we increased the Fourier
+    #     # resolution, only if we decreased it.
+    #     if nfourier_new < nfourier_old:
+    #         self.calculate()
 
     def calculate(self):
         """
@@ -116,32 +128,53 @@ class Qsc():
             self.calculate_r2()
             if self.order == 'r3':
                 self.calculate_r3()
+
+    def zero_grads(self, dofs):
+        """Zero out the gradients.
+
+        Args:
+            dofs (Array-like): list or tuple of dofs.
+        """
+        for d in dofs:
+            try:
+                d.grad.data.zero_()
+            except:
+                pass
     
-    def get_dofs(self):
+    def get_dofs(self, as_tuple=False):
         """
         Return a 1D numpy vector of all possible optimizable
         degrees-of-freedom, for simsopt.
         """
-        return np.concatenate((self.rc, self.zs, self.rs, self.zc,
-                               np.array([self.etabar, self.sigma0, self.B2s, self.B2c, self.p2, self.I2, self.B0])))
+        if as_tuple:
+            dofs = (self.rc, self.zs, self.rs, self.zc, self.etabar, self.B2s, self.B2c)
+            return dofs
+        else:
+            dofs = torch.concatenate((self.rc, self.zs, self.rs, self.zc,
+                                      torch.tensor([self.etabar, self.B2s, self.B2c])
+                                      ))
+            return dofs.detach().numpy()
 
     def set_dofs(self, x):
-        """
-        For interaction with simsopt, set the optimizable degrees of
+        """ For interaction with simsopt, set the optimizable degrees of
         freedom from a 1D numpy vector.
+
+        Args:
+            x (array): numpy array of dofs.
         """
-        assert len(x) == self.nfourier * 4 + 7
-        self.rc = x[self.nfourier * 0 : self.nfourier * 1]
-        self.zs = x[self.nfourier * 1 : self.nfourier * 2]
-        self.rs = x[self.nfourier * 2 : self.nfourier * 3]
-        self.zc = x[self.nfourier * 3 : self.nfourier * 4]
-        self.etabar = x[self.nfourier * 4 + 0]
-        self.sigma0 = x[self.nfourier * 4 + 1]
-        self.B2s = x[self.nfourier * 4 + 2]
-        self.B2c = x[self.nfourier * 4 + 3]
-        self.p2 = x[self.nfourier * 4 + 4]
-        self.I2 = x[self.nfourier * 4 + 5]
-        self.B0 = x[self.nfourier * 4 + 6]
+        assert len(x) == self.nfourier * 4 + 3
+        self.rc.data = torch.tensor(x[self.nfourier * 0 : self.nfourier * 1])
+        self.zs.data = torch.tensor(x[self.nfourier * 1 : self.nfourier * 2])
+        self.rs.data = torch.tensor(x[self.nfourier * 2 : self.nfourier * 3])
+        self.zc.data = torch.tensor(x[self.nfourier * 3 : self.nfourier * 4])
+        self.etabar.data = torch.tensor(x[self.nfourier * 4 + 0])
+        # self.sigma0 = x[self.nfourier * 4 + 1]
+        self.B2s.data = torch.tensor(x[self.nfourier * 4 + 1])
+        self.B2c.data = torch.tensor(x[self.nfourier * 4 + 2])
+        # self.p2 = x[self.nfourier * 4 + 4]
+        # self.I2 = x[self.nfourier * 4 + 5]
+        # self.B0 = x[self.nfourier * 4 + 6]
+
         self.calculate()
         logger.info('set_dofs called with x={}. Now iota={}, elongation={}'.format(x, self.iota, self.max_elongation))
         
@@ -154,7 +187,8 @@ class Qsc():
         names += ['zs({})'.format(j) for j in range(self.nfourier)]
         names += ['rs({})'.format(j) for j in range(self.nfourier)]
         names += ['zc({})'.format(j) for j in range(self.nfourier)]
-        names += ['etabar', 'sigma0', 'B2s', 'B2c', 'p2', 'I2', 'B0']
+        # names += ['etabar', 'sigma0', 'B2s', 'B2c', 'p2', 'I2', 'B0']
+        names += ['etabar','B2s', 'B2c']
         self.names = names
 
     @classmethod
@@ -219,5 +253,5 @@ class Qsc():
         This function can be used in optimization to penalize situations
         in which min(R0) < min_R0_constraint.
         """
-        return np.max((0, self.min_R0_threshold - self.min_R0)) ** 2
+        return torch.max((0, self.min_R0_threshold - self.min_R0)) ** 2
         

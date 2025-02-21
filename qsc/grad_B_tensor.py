@@ -6,6 +6,7 @@ Functions for computing the grad B tensor and grad grad B tensor.
 
 import logging
 import numpy as np
+import torch
 from .util import Struct, fourier_minimum
 
 #logging.basicConfig(level=logging.INFO)
@@ -36,31 +37,41 @@ def calculate_grad_B_tensor(self):
                           + s.sG * s.spsi * s.d_l_d_varphi * s.torsion \
                           + s.iotaN * (s.Y1s * s.Y1s + s.Y1c * s.Y1c))
     if hasattr(s.B0, "__len__"): # if B0 is an array (in quasisymmetry B0 is a scalar)
-        tensor.tt = s.sG * np.matmul(s.d_d_varphi, s.B0) / s.d_l_d_varphi
+        tensor.tt = s.sG * torch.matmul(s.d_d_varphi, s.B0) / s.d_l_d_varphi
     else:
         tensor.tt = 0
 
     self.grad_B_tensor = tensor
     
-    t = s.tangent_cylindrical.transpose()
-    n = s.normal_cylindrical.transpose()
-    b = s.binormal_cylindrical.transpose()
-    self.grad_B_tensor_cylindrical = np.array([[
-                              tensor.nn * n[i] * n[j] \
+    t = s.tangent_cylindrical.transpose(0,1)
+    n = s.normal_cylindrical.transpose(0,1)
+    b = s.binormal_cylindrical.transpose(0,1)
+
+    grad_B_tensor_cylindrical = torch.zeros(3,3,self.nphi)
+    for j in range(3):
+        for i in range(3):
+            grad_B_tensor_cylindrical[j,i,:] = (tensor.nn * n[i] * n[j] \
                             + tensor.bn * b[i] * n[j] + tensor.nb * n[i] * b[j] \
                             + tensor.bb * b[i] * b[j] \
                             + tensor.tn * t[i] * n[j] + tensor.nt * n[i] * t[j] \
-                            + tensor.tt * t[i] * t[j]
-                        for i in range(3)] for j in range(3)])
+                            + tensor.tt * t[i] * t[j])
+    self.grad_B_tensor_cylindrical = grad_B_tensor_cylindrical
+    # self.grad_B_tensor_cylindrical = [[
+    #                           tensor.nn * n[i] * n[j] \
+    #                         + tensor.bn * b[i] * n[j] + tensor.nb * n[i] * b[j] \
+    #                         + tensor.bb * b[i] * b[j] \
+    #                         + tensor.tn * t[i] * n[j] + tensor.nt * n[i] * t[j] \
+    #                         + tensor.tt * t[i] * t[j]
+    #                     for i in range(3)] for j in range(3)]
 
     self.grad_B_colon_grad_B = tensor.tn * tensor.tn + tensor.nt * tensor.nt \
         + tensor.bb * tensor.bb + tensor.nn * tensor.nn \
         + tensor.nb * tensor.nb + tensor.bn * tensor.bn \
         + tensor.tt * tensor.tt
 
-    self.L_grad_B = s.B0 * np.sqrt(2 / self.grad_B_colon_grad_B)
+    self.L_grad_B = s.B0 * torch.sqrt(2 / self.grad_B_colon_grad_B)
     self.inv_L_grad_B = 1.0 / self.L_grad_B
-    self.min_L_grad_B = fourier_minimum(self.L_grad_B)
+    self.min_L_grad_B = fourier_minimum(self.L_grad_B.detach().numpy())
     
 def calculate_grad_grad_B_tensor(self, two_ways=False):
     """
@@ -97,7 +108,7 @@ def calculate_grad_grad_B_tensor(self, two_ways=False):
 
     iota_N0 = s.iotaN
     iota = s.iota
-    lp = np.abs(s.G0) / s.B0
+    lp = torch.abs(s.G0) / s.B0
 
     curvature = s.curvature
     torsion = s.torsion
@@ -136,8 +147,8 @@ def calculate_grad_grad_B_tensor(self, two_ways=False):
     d_curvature_d_varphi = s.d_curvature_d_varphi
     d_torsion_d_varphi = s.d_torsion_d_varphi
 
-    grad_grad_B = np.zeros((s.nphi, 3, 3, 3))
-    grad_grad_B_alt = np.zeros((s.nphi, 3, 3, 3))
+    grad_grad_B = torch.zeros((s.nphi, 3, 3, 3))
+    grad_grad_B_alt = torch.zeros((s.nphi, 3, 3, 3))
 
     # The elements that follow are computed in the Mathematica notebook "20200407-01 Grad grad B tensor near axis"
     # and then formatted for fortran by the python script process_grad_grad_B_tensor_code
@@ -549,10 +560,10 @@ def calculate_grad_grad_B_tensor(self, two_ways=False):
 
     # Compute the (inverse) scale length
     squared = grad_grad_B * grad_grad_B
-    norm_squared = np.sum(squared, axis=(1,2,3))
-    self.grad_grad_B_inverse_scale_length_vs_varphi = np.sqrt(np.sqrt(norm_squared) / (4*B0))
+    norm_squared = torch.sum(squared, axis=(1,2,3))
+    self.grad_grad_B_inverse_scale_length_vs_varphi = torch.sqrt(torch.sqrt(norm_squared) / (4*B0))
     self.L_grad_grad_B = 1 / self.grad_grad_B_inverse_scale_length_vs_varphi
-    self.grad_grad_B_inverse_scale_length = np.max(self.grad_grad_B_inverse_scale_length_vs_varphi)
+    self.grad_grad_B_inverse_scale_length = torch.max(self.grad_grad_B_inverse_scale_length_vs_varphi)
 
     if not two_ways:
         return
@@ -1220,9 +1231,9 @@ def Bfield_cylindrical(self, r=0, theta=0):
     '''
     
     # Define auxiliary variables
-    t = self.tangent_cylindrical.transpose()
-    n = self.normal_cylindrical.transpose()
-    b = self.binormal_cylindrical.transpose()
+    t = self.tangent_cylindrical.transpose(0,1)
+    n = self.normal_cylindrical.transpose(0,1)
+    b = self.binormal_cylindrical.transpose(0,1)
     B0 = self.B0
     sG = self.sG
     G0 = self.G0
@@ -1245,11 +1256,11 @@ def Bfield_cylindrical(self, r=0, theta=0):
         return B0_vector
     else:
         factor = B0 * B0 / G0
-        B1_vector_t = factor * (X1c * np.cos(theta) + X1s * np.sin(theta)) * d_l_d_varphi * curvature
-        B1_vector_n = factor * (np.cos(theta) * (d_X1c_d_varphi - Y1c * d_l_d_varphi * torsion + iotaN * X1s) \
-                                + np.sin(theta) * (d_X1s_d_varphi - Y1s * d_l_d_varphi * torsion - iotaN * X1c))
-        B1_vector_b = factor * (np.cos(theta) * (d_Y1c_d_varphi + X1c * d_l_d_varphi * torsion + iotaN * Y1s) \
-                                + np.sin(theta) * (d_Y1s_d_varphi + X1s * d_l_d_varphi * torsion - iotaN * Y1c))
+        B1_vector_t = factor * (X1c * torch.cos(theta) + X1s * torch.sin(theta)) * d_l_d_varphi * curvature
+        B1_vector_n = factor * (torch.cos(theta) * (d_X1c_d_varphi - Y1c * d_l_d_varphi * torsion + iotaN * X1s) \
+                                + torch.sin(theta) * (d_X1s_d_varphi - Y1s * d_l_d_varphi * torsion - iotaN * X1c))
+        B1_vector_b = factor * (torch.cos(theta) * (d_Y1c_d_varphi + X1c * d_l_d_varphi * torsion + iotaN * Y1s) \
+                                + torch.sin(theta) * (d_Y1s_d_varphi + X1s * d_l_d_varphi * torsion - iotaN * Y1c))
 
         B1_vector = B1_vector_t * t + B1_vector_n * n + B1_vector_b * b
         B_vector_cylindrical = B0_vector + r * B1_vector
@@ -1270,11 +1281,11 @@ def Bfield_cartesian(self, r=0, theta=0):
     B_vector_cylindrical = self.Bfield_cylindrical(r,theta)
     phi = self.phi
 
-    B_x = np.cos(phi) * B_vector_cylindrical[0] - np.sin(phi) * B_vector_cylindrical[1]
-    B_y = np.sin(phi) * B_vector_cylindrical[0] + np.cos(phi) * B_vector_cylindrical[1]
+    B_x = torch.cos(phi) * B_vector_cylindrical[0] - torch.sin(phi) * B_vector_cylindrical[1]
+    B_y = torch.sin(phi) * B_vector_cylindrical[0] + torch.cos(phi) * B_vector_cylindrical[1]
     B_z = B_vector_cylindrical[2]
 
-    B_vector_cartesian = np.array([B_x, B_y, B_z])
+    B_vector_cartesian = torch.stack([B_x, B_y, B_z])
 
     return B_vector_cartesian
 
@@ -1287,21 +1298,21 @@ def grad_B_tensor_cartesian(self):
 
     B0, B1, B2 = self.Bfield_cylindrical()
     nablaB = self.grad_B_tensor_cylindrical
-    cosphi = np.cos(self.phi)
-    sinphi = np.sin(self.phi)
+    cosphi = torch.cos(self.phi)
+    sinphi = torch.sin(self.phi)
     R0 = self.R0
 
-    grad_B_vector_cartesian = np.array([
-[cosphi**2*nablaB[0, 0] - cosphi*sinphi*(nablaB[0, 1] + nablaB[1, 0]) + 
-   sinphi**2*nablaB[1, 1], cosphi**2*nablaB[0, 1] - sinphi**2*nablaB[1, 0] + 
-   cosphi*sinphi*(nablaB[0, 0] - nablaB[1, 1]), cosphi*nablaB[0, 2] - 
-   sinphi*nablaB[1, 2]], [-(sinphi**2*nablaB[0, 1]) + cosphi**2*nablaB[1, 0] + 
-   cosphi*sinphi*(nablaB[0, 0] - nablaB[1, 1]), sinphi**2*nablaB[0, 0] + 
-   cosphi*sinphi*(nablaB[0, 1] + nablaB[1, 0]) + cosphi**2*nablaB[1, 1], 
-  sinphi*nablaB[0, 2] + cosphi*nablaB[1, 2]], 
- [cosphi*nablaB[2, 0] - sinphi*nablaB[2, 1], sinphi*nablaB[2, 0] + cosphi*nablaB[2, 1], 
-  nablaB[2, 2]]
-    ])
+    grad_B_vector_cartesian = torch.zeros((3,3,self.nphi))
+    grad_B_vector_cartesian[0,0] = (cosphi**2*nablaB[0, 0] - cosphi*sinphi*(nablaB[0, 1] + nablaB[1, 0]) + 
+                                 sinphi**2*nablaB[1, 1])
+    grad_B_vector_cartesian[0,1] = (cosphi**2*nablaB[0, 1] - sinphi**2*nablaB[1, 0] + cosphi*sinphi*(nablaB[0, 0] - nablaB[1, 1]))
+    grad_B_vector_cartesian[0,2] = cosphi*nablaB[0, 2] - sinphi*nablaB[1, 2]
+    grad_B_vector_cartesian[1,0] = (-(sinphi**2*nablaB[0, 1]) + cosphi**2*nablaB[1, 0] + cosphi*sinphi*(nablaB[0, 0] - nablaB[1, 1]))
+    grad_B_vector_cartesian[1,1] = (sinphi**2*nablaB[0, 0] + cosphi*sinphi*(nablaB[0, 1] + nablaB[1, 0]) + cosphi**2*nablaB[1, 1])
+    grad_B_vector_cartesian[1,2] = sinphi*nablaB[0, 2] + cosphi*nablaB[1, 2]
+    grad_B_vector_cartesian[2,0] = cosphi*nablaB[2, 0] - sinphi*nablaB[2, 1]
+    grad_B_vector_cartesian[2,1] = sinphi*nablaB[2, 0] + cosphi*nablaB[2, 1]
+    grad_B_vector_cartesian[2,2] = nablaB[2, 2]
 
     return grad_B_vector_cartesian
 
@@ -1311,7 +1322,7 @@ def grad_grad_B_tensor_cylindrical(self):
     vector B=(B_R,B_phi,B_Z) at every point along the axis (hence with nphi points)
     where R, phi and Z are the standard cylindrical coordinates.
     '''
-    return np.transpose(self.grad_grad_B,(1,2,3,0))
+    return torch.permute(self.grad_grad_B,(1,2,3,0))
 
 def grad_grad_B_tensor_cartesian(self):
     '''
@@ -1320,10 +1331,10 @@ def grad_grad_B_tensor_cartesian(self):
     where x, y and z are the standard cartesian coordinates.
     '''
     nablanablaB = self.grad_grad_B_tensor_cylindrical()
-    cosphi = np.cos(self.phi)
-    sinphi = np.sin(self.phi)
+    cosphi = torch.cos(self.phi)
+    sinphi = torch.sin(self.phi)
 
-    grad_grad_B_vector_cartesian = np.array([[
+    grad_grad_B_vector_cartesian = torch.tensor([[
 [cosphi**3*nablanablaB[0, 0, 0] - cosphi**2*sinphi*(nablanablaB[0, 0, 1] + 
       nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0]) + 
     cosphi*sinphi**2*(nablanablaB[0, 1, 1] + nablanablaB[1, 0, 1] + 
