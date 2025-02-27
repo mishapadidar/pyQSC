@@ -90,8 +90,13 @@ def test_Bfield_axis_mse():
     loss = stel.Bfield_axis_mse(B_target)
 
     # compute gradient 
-    loss.backward()
-    dloss_by_drc = stel.rc.grad
+    # loss.backward()
+    # dloss_by_drc = stel.rc.grad
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_drs = dloss_by_ddofs[2]
+    dloss_by_detabar = dloss_by_ddofs[4]
 
     # check gradient with finite difference
     def fd_obj(x):
@@ -101,6 +106,16 @@ def test_Bfield_axis_mse():
     dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-6)
     err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
     print('dBfield_axis_mse/drc err', err.item())
+
+    # check etabar gradient with finite difference
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return stel.Bfield_axis_mse(B_target).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-7)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dBfield_axis_mse/detabar err', err.item())
+
 
 def test_grad_B_tensor_cartesian_mse():
     """
@@ -114,27 +129,10 @@ def test_grad_B_tensor_cartesian_mse():
     loss = stel.grad_B_tensor_cartesian_mse(gradB_target)
     print(loss)
 
-    # compute gradient 
-    stel.zero_grad()
-    loss.backward(retain_graph=True)
-
-    # stel.dresidual_by_ddof_vjp(torch.zeros(stel.nphi))
-
-    # chain rule
-    partialloss_by_partial_rc = stel.rc.grad 
-    partialloss_by_partial_zs = stel.zs.grad 
-    partialloss_by_partial_etabar = stel.etabar.grad
-    partialloss_by_partialsigma = stel.sigma.grad 
-    partialloss_by_partialiota = stel.iota.grad 
-    partialloss_by_partialz = torch.clone(partialloss_by_partialsigma).detach()
-    partialloss_by_partialz[0] = torch.clone(partialloss_by_partialiota).detach()
-    partialloss_by_partial_dofs = stel.dresidual_by_ddof_vjp(partialloss_by_partialz)
-    partialloss_by_partial_rc_indirect = partialloss_by_partial_dofs[0]
-    partialloss_by_partial_zs_indirect = partialloss_by_partial_dofs[1]
-    partialloss_by_partial_etabar_indirect = partialloss_by_partial_dofs[4]
-    dloss_by_drc = partialloss_by_partial_rc_indirect + partialloss_by_partial_rc
-    dloss_by_dzs = partialloss_by_partial_zs_indirect + partialloss_by_partial_zs
-    dloss_by_detabar = partialloss_by_partial_etabar_indirect + partialloss_by_partial_etabar
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
 
     # check rc gradient with finite difference
     def fd_obj(x):
@@ -163,8 +161,65 @@ def test_grad_B_tensor_cartesian_mse():
     err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
     print('dgrad_B_tensor_cartesian_mse/detabar err', err.item())
 
+def test_sum_loss():
+    """
+    Test gradient of a sum of losses with finite difference.
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", order='r1')
+
+    # check loss
+    gradB_target = 1.34 + torch.clone(stel.grad_B_tensor_cartesian()).detach()
+    loss = stel.grad_B_tensor_cartesian_mse(gradB_target)
+    B_target = 1.4324 + torch.clone(stel.Bfield_cartesian()).detach()
+    loss += stel.Bfield_axis_mse(B_target)
+    loss += (stel.iota - 1.21)**2
+    print(loss)
+
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        l = stel.grad_B_tensor_cartesian_mse(gradB_target).detach()
+        l += stel.Bfield_axis_mse(B_target).detach()
+        l += (stel.iota.detach() - 1.21)**2
+        return l
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-7)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dloss/drc err', err.item())
+
+    # check zs gradient with finite difference
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        l = stel.grad_B_tensor_cartesian_mse(gradB_target).detach()
+        l += stel.Bfield_axis_mse(B_target).detach()
+        l += (stel.iota.detach() - 1.21)**2
+        return l
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-7)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dloss/dzs err', err.item())
+
+    # check etabar gradient with finite difference
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        l = stel.grad_B_tensor_cartesian_mse(gradB_target).detach()
+        l += stel.Bfield_axis_mse(B_target).detach()
+        l += (stel.iota.detach() - 1.21)**2
+        return l
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-7)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dloss/detabar err', err.item())
+
 
 if __name__ == "__main__":
-    test_sigma_iota_derivatives()
-    test_Bfield_axis_mse()
-    test_grad_B_tensor_cartesian_mse()
+    # test_sigma_iota_derivatives()
+    # test_Bfield_axis_mse()
+    # test_grad_B_tensor_cartesian_mse()
+    test_sum_loss()
