@@ -30,7 +30,7 @@ class QSCSimple(torch.nn.Module):
         self.solve_system()
     
     def compute_kappa(self):
-        # intermediate quantity
+        """ intermediate quantity that depends on x """
         return self.x[:2]**2
     
     def _residual(self, sigma):
@@ -38,18 +38,33 @@ class QSCSimple(torch.nn.Module):
         return self.kappa - 3.1*sigma**3
     
     def _jacobian(self, sigma):
-        """ jacobian of residual function wrt sigma """
-        # jacobian wrt sigma
+        """ jacobian of residual function w.r.t. sigma """
         return - 9.3 * torch.diag(sigma**2)
     
     def solve_system(self):
         """ Compute sigma(x) by solving r(sigma, x) = 0"""
-        # save values not gradients!
         sol = (self.kappa / 3.1)**(1/3)
         self.sigma = torch.nn.Parameter(torch.clone(sol).detach())
 
     def dsigma_by_dx_jvp(self, v):
-        """ Adjoint system: compute the jacobian vector product transpose(dsigma/dx) * v """
+        """ Adjoint system: compute the jacobian vector product transpose(dsigma/dx) * v 
+        
+        The derivative of the residual system at a solution is,
+            dr/dsigma * dsigma/dx = - dr/dx,
+        where we aim to solve for the jacobian, dsigma/dx. 
+        
+        The solution to the derivative system is,
+            dsigma/dx = - inv(dr/dsigma) * dr/dx.
+        Transposing the system and right-multiplying by a vector v of length(sigma),
+            transpose(dsigma/dx) * v = - transpose(dr/dx) * inv(tranpose(dr/dsigma)) * v.
+        If we define lambda via,
+            tranpose(dr/dsigma) * lambda = - v,                           (1)
+        then we can write our solution as, 
+            transpose(dsigma/dx) * v = transpose(dr/dx) * lambda.         (2)
+
+        Hence computing the derivative has two steps: solve (1) for lambda, use autodiff to
+        compute transpose(dr/dx) * lambda with (2).
+        """
         # solve (1) for lambda
         dr_by_dsigma = self._jacobian(self.sigma)
         _lambda = torch.linalg.solve(dr_by_dsigma.T, - v)
@@ -136,15 +151,15 @@ if __name__ == "__main__":
     print("")
 
     # compute dsigma/dx * z
-    z = torch.tensor([1.124124, 2.421])
-    jvp = model.dsigma_by_dx_jvp(z)[0].detach()
+    v = torch.tensor([1.124124, 2.421])
+    jvp = model.dsigma_by_dx_jvp(v)[0].detach()
 
     # compare to finite difference
     def fd_obj(x):
         model.set_dofs(x)
         return model.sigma.detach()
     dsigma_by_dx_fd = finite_difference(fd_obj, torch.clone(model.x.detach()), eps=1e-5)
-    jvp_fd = torch.matmul(dsigma_by_dx_fd, z)
+    jvp_fd = torch.matmul(dsigma_by_dx_fd, v)
     err = torch.max(torch.abs(jvp - jvp_fd))
     print("dsigma/dx jvp err ", err.item())
 
