@@ -66,44 +66,55 @@ def solve_sigma_equation(self):
     self.sigma[0] = self.sigma0
     """
     sol = newton(self._residual, x0, jac=self._jacobian) 
-    # don't track sigma/iota with autograd
-    self.sigma = torch.clone(sol).detach()
-    self.iota = torch.clone(sol[0]).detach()
-    self.iotaN = self.iota + self.helicity * self.nfp
-    self.sigma[0] = self.sigma0
 
+    # detach so we DOFS dont differentiate through sigma/iota.
+    sigma = torch.clone(sol).detach()
+    iota = torch.clone(sol[0]).detach()
+    sigma[0] = self.sigma0
+
+    # set sigma/iota to be variables we can differentiate through later
+    self.sigma = torch.nn.Parameter(sigma, requires_grad=True)
+    self.iota =  torch.nn.Parameter(iota, requires_grad=True)
+    self.iotaN = self.iota + self.helicity * self.nfp
 
 def dresidual_by_ddof_vjp(self, v):
     """
-    Differentiate the system
+    Differentiate the solution of the sigma equation with respect to the degrees of
+    freedom.
+
+    The residual satisfies
         r(z(x), x) = 0
-    w.r.t x. The derivative system at a solution is,
+    where x are the dofs and z(x) = [iota(x), sigma(x)]. The derivative system at a solution is,
         dr/dz * dz/dx = - dr/dx,
-    where we aim to solve for the jacobian dz/dx. For optimization we only need know,
+    where we aim to solve for the jacobian, dz/dx. 
+    
+    For optimization we only need know,
         transpose(dz/dx) * v
     for a probe vector v, so we solve for this instead. This has the added benefit of 
     playing well with torch vector jacobian products.
     
     The solution to the derivative system is,
             dz/dx = - inv(dr/dz) * dr/dx.
-    Transposing the system and right-multiplying by a vector v of len(r),
+    Transposing the system and right-multiplying by a vector v of length nphi,
         transpose(dz/dx) * v = - transpose(dr/dx) * inv(tranpose(dr/dz)) * v.
     If we define lambda via,
         tranpose(dr/dz) * lambda = - v,                           (1)
     then we can write our solution as, 
         transpose(dz/dx) * v = transpose(dr/dx) * lambda.         (2)
+
     Hence computing the derivative has two steps: solve (1) for lambda, use autodiff to
     compute transpose(dr/dx) * lambda with (2).
 
     For our problem, z(x) is the function
         z(x) = [iota(x), sigma_1(x), ..., sigma_nphi(x)],
-    since sigma_0 is a fixed value. The structure of v should match accordingly. For use in 
-    computing derivatives of an optimization objective, J(z(x), x), set v = dJ/dz. Specifically,
-    for our problem use 
+    since sigma_0 is a fixed value. This means that dz/dx has the structure, 
+        dz/dx = [[diota/dx], [dsigma_1/dx], ..., [dsigma_nphi/dx]]
+    where rows are gradients. For use in computing derivatives of an optimization objective, 
+    J(z(x), x), set v = dJ/dz,
         v = [dJ/diota, dJ/dsigma_1, ..., dJ/dsigma_nphi].
 
     Args:
-        v (tensor): tensor of same length as sigma (number of residuals)
+        v (tensor): tensor of length nphi (number of residuals)
     
     Return:
         dsigma_by_ddofs (tuple): tuple of derivatives, one entry for each DOF. Each 
@@ -120,9 +131,6 @@ def dresidual_by_ddof_vjp(self, v):
     dofs = self.get_dofs(as_tuple=True)
     dsigma_iota_vjp_by_ddofs = torch.autograd.grad(r, dofs, grad_outputs=_lambda, retain_graph=True, allow_unused=True) # tuple
     
-    # TODO: zero out the grads?
-    # self.zero_grads(dofs)
-
     return dsigma_iota_vjp_by_ddofs
 
 def _determine_helicity(self):

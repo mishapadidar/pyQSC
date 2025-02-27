@@ -10,6 +10,10 @@ from scipy.io import netcdf
 import torch
 import numpy as np
 
+# TODO: only modify the classes datatype.
+# set 64-bit default
+torch.set_default_dtype(torch.float64)
+
 #logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,7 @@ class Qsc(torch.nn.Module):
     from .to_vmec import to_vmec
     from .util import B_mag
     from .configurations import from_paper, configurations
+    from .objectives import Bfield_axis_mse, grad_B_tensor_cartesian_mse
     
     def __init__(self, rc, zs, rs=[], zc=[], nfp=1, etabar=1., sigma0=0., B0=1.,
                  I2=0., sG=1, spsi=1, nphi=61, B2s=0., B2c=0., p2=0., order="r1"):
@@ -42,10 +47,6 @@ class Qsc(torch.nn.Module):
         Create a quasisymmetric stellarator.
         """
         super().__init__()
-
-        # TODO: only modify the classes datatype.
-        # set 64-bit default
-        torch.set_default_dtype(torch.float64)
 
         # First, force {rc, zs, rs, zc} to have the same length, for
         # simplicity.
@@ -59,10 +60,10 @@ class Qsc(torch.nn.Module):
         # self.zs = torch.zeros(nfourier, requires_grad=True)
         # self.rs = torch.zeros(nfourier, requires_grad=True)
         # self.zc = torch.zeros(nfourier, requires_grad=True)
-        self.rc[:len(rc)].data += torch.tensor(rc)
-        self.zs[:len(zs)].data += torch.tensor(zs)
-        self.rs[:len(rs)].data += torch.tensor(rs)
-        self.zc[:len(zc)].data += torch.tensor(zc)
+        self.rc[:len(rc)].data += torch.clone(torch.tensor(rc)).detach()
+        self.zs[:len(zs)].data += torch.clone(torch.tensor(zs)).detach()
+        self.rs[:len(rs)].data += torch.clone(torch.tensor(rs)).detach()
+        self.zc[:len(zc)].data += torch.clone(torch.tensor(zc)).detach()
 
         # Force nphi to be odd:
         if np.mod(nphi, 2) == 0:
@@ -128,18 +129,6 @@ class Qsc(torch.nn.Module):
             self.calculate_r2()
             if self.order == 'r3':
                 self.calculate_r3()
-
-    def zero_grads(self, dofs):
-        """Zero out the gradients.
-
-        Args:
-            dofs (Array-like): list or tuple of dofs.
-        """
-        for d in dofs:
-            try:
-                d.grad.data.zero_()
-            except:
-                pass
     
     def get_dofs(self, as_tuple=False):
         """
@@ -163,14 +152,14 @@ class Qsc(torch.nn.Module):
             x (array): numpy array of dofs.
         """
         assert len(x) == self.nfourier * 4 + 3
-        self.rc.data = torch.tensor(x[self.nfourier * 0 : self.nfourier * 1])
-        self.zs.data = torch.tensor(x[self.nfourier * 1 : self.nfourier * 2])
-        self.rs.data = torch.tensor(x[self.nfourier * 2 : self.nfourier * 3])
-        self.zc.data = torch.tensor(x[self.nfourier * 3 : self.nfourier * 4])
-        self.etabar.data = torch.tensor(x[self.nfourier * 4 + 0])
+        self.rc.data = torch.clone(torch.tensor(x[self.nfourier * 0 : self.nfourier * 1])).detach()
+        self.zs.data = torch.clone(torch.tensor(x[self.nfourier * 1 : self.nfourier * 2])).detach()
+        self.rs.data = torch.clone(torch.tensor(x[self.nfourier * 2 : self.nfourier * 3])).detach()
+        self.zc.data = torch.clone(torch.tensor(x[self.nfourier * 3 : self.nfourier * 4])).detach()
+        self.etabar.data = torch.clone(torch.tensor(x[self.nfourier * 4 + 0])).detach()
         # self.sigma0 = x[self.nfourier * 4 + 1]
-        self.B2s.data = torch.tensor(x[self.nfourier * 4 + 1])
-        self.B2c.data = torch.tensor(x[self.nfourier * 4 + 2])
+        self.B2s.data = torch.clone(torch.tensor(x[self.nfourier * 4 + 1])).detach()
+        self.B2c.data = torch.clone(torch.tensor(x[self.nfourier * 4 + 2])).detach()
         # self.p2 = x[self.nfourier * 4 + 4]
         # self.I2 = x[self.nfourier * 4 + 5]
         # self.B0 = x[self.nfourier * 4 + 6]
