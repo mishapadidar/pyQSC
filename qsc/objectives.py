@@ -20,11 +20,9 @@ def Bfield_axis_mse(self, B_target):
 
     Args:
         B_target: (3, nphi) tensor of target magnetic field values.
-        r: the near-axis radius
-        theta: the Boozer poloidal angle vartheta (= theta-N*phi)
     '''
     B = self.Bfield_cartesian() # (3, nphi)
-    dphi = np.diff(self.phi)[0]
+    dphi = torch.diff(self.phi)[0]
     d_l_d_phi = self.d_l_d_phi
     dl = d_l_d_phi * dphi # (nphi,)
     loss = 0.5 * torch.sum(torch.sum((B - B_target)**2, dim=0) * dl) # scalar tensor
@@ -97,3 +95,4 @@ def total_derivative(self, loss):
         dloss_by_ddofs.append(dloss_by_dx)
 
     return dloss_by_ddofs
+

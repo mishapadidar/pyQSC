@@ -148,3 +148,25 @@ def B_mag(self, r, theta, phi, Boozer_toroidal = False):
         B += (r**2) * (self.B20_spline(phi) + self.B2c * np.cos(2 * thetaN) + self.B2s * np.sin(2 * thetaN))
 
     return B
+
+def finite_difference(f, x, eps=1e-6, *args, **kwargs):
+    """Approximate jacobian with central difference.
+
+    Args:
+        f (function): function to differentiate, can be scalar valued or 1d-array
+            valued.
+        x (1d-array): input to f(x) at which to take the gradient.
+        eps (float, optional): finite difference step size. Defaults to 1e-6.
+
+    Returns:
+        _type_: _description_
+    """
+    jac_est = []
+    for i in range(len(x)):
+        x[i] += eps
+        fx = f(x, *args, **kwargs)
+        x[i] -= 2*eps
+        fy = f(x, *args, **kwargs)
+        x[i] += eps
+        jac_est.append((fx-fy)/(2*eps))
+    return np.array(jac_est).T

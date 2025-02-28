@@ -124,6 +124,9 @@ def init_axis(self):
         self.varphi[j] = self.varphi[j-1] + (d_l_d_phi[j-1] + d_l_d_phi[j])
     self.varphi = self.varphi * (0.5 * d_phi * 2 * torch.pi / axis_length)
 
+    # Cartesian coordinates of axis
+    self.XYZ0 = torch.stack((R0 * torch.cos(phi), R0 * torch.sin(phi), Z0))
+    
     # Add all results to self:
     self.phi = phi
     self.d_phi = d_phi
