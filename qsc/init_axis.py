@@ -124,15 +124,22 @@ def init_axis(self):
         self.varphi[j] = self.varphi[j-1] + (d_l_d_phi[j-1] + d_l_d_phi[j])
     self.varphi = self.varphi * (0.5 * d_phi * 2 * torch.pi / axis_length)
 
+    # TODO: test this block
     # Cartesian coordinates of axis
-    self.XYZ0 = torch.stack((R0 * torch.cos(phi), R0 * torch.sin(phi), Z0))
-    
+    self.XYZ0 = torch.stack((R0 * torch.cos(phi), R0 * torch.sin(phi), Z0)) # (3, nphi)
+    # derivative of axis wrt phi
+    X0p = R0p * torch.cos(phi) - R0 * torch.sin(phi)
+    Y0p = R0p * torch.sin(phi) + R0 * torch.cos(phi)
+    self.dXYZ0_by_dphi = torch.stack([X0p, Y0p, Z0p]) # (3, nphi)
+
     # Add all results to self:
     self.phi = phi
     self.d_phi = d_phi
     self.R0 = R0
     self.Z0 = Z0
     self.R0p = R0p
+    self.X0p = X0p
+    self.Y0p = Y0p
     self.Z0p = Z0p
     self.R0pp = R0pp
     self.Z0pp = Z0pp
@@ -155,6 +162,22 @@ def init_axis(self):
     self.Bbar = self.spsi * self.B0
     self.abs_G0_over_B0 = abs_G0_over_B0
 
+    # TODO: unit test the cartesian frenet-frame
+    cosphi = torch.cos(phi)
+    sinphi = torch.sin(phi)
+    # n_x = n_R * cos(phi) - n_phi * sin(phi)
+    normal_x = normal_cylindrical[:,0] * cosphi - normal_cylindrical[:,1] * sinphi
+    # n_y= n_R * sin(phi) + n_phi * cos(phi)
+    normal_y = normal_cylindrical[:,0] * sinphi + normal_cylindrical[:,1] * cosphi
+    binormal_x = binormal_cylindrical[:,0] * cosphi - binormal_cylindrical[:,1] * sinphi
+    binormal_y = binormal_cylindrical[:,0] * sinphi + binormal_cylindrical[:,1] * cosphi
+    tangent_x = tangent_cylindrical[:,0] * cosphi - tangent_cylindrical[:,1] * sinphi
+    tangent_y = tangent_cylindrical[:,0] * sinphi + tangent_cylindrical[:,1] * cosphi
+
+    self.normal_cartesian = torch.stack([normal_x, normal_y, normal_cylindrical[:,2]]).T # (nphi, 3)
+    self.binormal_cartesian = torch.stack([binormal_x, binormal_y, binormal_cylindrical[:,2]]).T # (nphi, 3)
+    self.tangent_cartesian = torch.stack([tangent_x, tangent_y, tangent_cylindrical[:,2]]).T # (nphi, 3)
+    
     # The output is not stellarator-symmetric if (1) R0s is nonzero,
     # (2) Z0c is nonzero, (3) sigma_initial is nonzero, or (B2s is
     # nonzero and order != 'r1')

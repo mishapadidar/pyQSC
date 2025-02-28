@@ -33,6 +33,7 @@ class Qsc(torch.nn.Module):
     from .calculate_r2 import calculate_r2
     from .calculate_r3 import calculate_r3, calculate_shear
     from .mercier import mercier
+    from .geo import surface, dsurface_by_dvarphi, dsurface_by_dtheta, surface_normal
     from .r_singularity import calculate_r_singularity
     from .plot import plot, plot_boundary, get_boundary, B_fieldline, B_contour, plot_axis, flux_tube
     from .Frenet_to_cylindrical import Frenet_to_cylindrical, to_RZ
