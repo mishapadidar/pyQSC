@@ -3,7 +3,6 @@ import numpy as np
 from qsc import Qsc
 import torch
 import matplotlib.pyplot as plt
-from qsc.geo import surface
 from scipy.interpolate import CubicSpline
 
 
