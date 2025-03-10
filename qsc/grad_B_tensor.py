@@ -1325,77 +1325,168 @@ def grad_grad_B_tensor_cylindrical(self):
     return torch.permute(self.grad_grad_B,(1,2,3,0))
 
 def grad_grad_B_tensor_cartesian(self):
-    '''
-    Function to calculate the gradient of of the gradient the magnetic field
-    vector B=(B_x,B_y,B_z) at every point along the axis (hence with nphi points)
-    where x, y and z are the standard cartesian coordinates.
-    '''
-    nablanablaB = self.grad_grad_B_tensor_cylindrical()
-    cosphi = torch.cos(self.phi)
-    sinphi = torch.sin(self.phi)
+     '''
+     Function to calculate the gradient of of the gradient the magnetic field
+     vector B=(B_x,B_y,B_z) at every point along the axis (hence with nphi points)
+     where x, y and z are the standard cartesian coordinates.
+     '''
+     nablanablaB = self.grad_grad_B_tensor_cylindrical()
+     cosphi = torch.cos(self.phi)
+     sinphi = torch.sin(self.phi)
 
-    grad_grad_B_vector_cartesian = torch.tensor([[
-[cosphi**3*nablanablaB[0, 0, 0] - cosphi**2*sinphi*(nablanablaB[0, 0, 1] + 
-      nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0]) + 
-    cosphi*sinphi**2*(nablanablaB[0, 1, 1] + nablanablaB[1, 0, 1] + 
-      nablanablaB[1, 1, 0]) - sinphi**3*nablanablaB[1, 1, 1], 
-   cosphi**3*nablanablaB[0, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
+#      grad_grad_B_vector_cartesian = torch.tensor([[
+# [cosphi**3*nablanablaB[0, 0, 0] - cosphi**2*sinphi*(nablanablaB[0, 0, 1] + 
+#       nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0]) + 
+#     cosphi*sinphi**2*(nablanablaB[0, 1, 1] + nablanablaB[1, 0, 1] + 
+#       nablanablaB[1, 1, 0]) - sinphi**3*nablanablaB[1, 1, 1], 
+#    cosphi**3*nablanablaB[0, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[0, 1, 1] - nablanablaB[1, 0, 1]) + sinphi**3*nablanablaB[1, 1, 0] - 
+#     cosphi*sinphi**2*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]), cosphi**2*nablanablaB[0, 0, 2] - 
+#     cosphi*sinphi*(nablanablaB[0, 1, 2] + nablanablaB[1, 0, 2]) + 
+#     sinphi**2*nablanablaB[1, 1, 2]], [cosphi**3*nablanablaB[0, 1, 0] + 
+#     sinphi**3*nablanablaB[1, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) - 
+#     cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]), cosphi**3*nablanablaB[0, 1, 1] - 
+#     sinphi**3*nablanablaB[1, 0, 0] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[1, 0, 1] - nablanablaB[1, 1, 0]) + 
+#     cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] - 
+#       nablanablaB[1, 1, 1]), cosphi**2*nablanablaB[0, 1, 2] - 
+#     sinphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
+#       nablanablaB[1, 1, 2])], [cosphi**2*nablanablaB[0, 2, 0] - 
+#     cosphi*sinphi*(nablanablaB[0, 2, 1] + nablanablaB[1, 2, 0]) + 
+#     sinphi**2*nablanablaB[1, 2, 1], cosphi**2*nablanablaB[0, 2, 1] - 
+#     sinphi**2*nablanablaB[1, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 0] - 
+#       nablanablaB[1, 2, 1]), cosphi*nablanablaB[0, 2, 2] - 
+#     sinphi*nablanablaB[1, 2, 2]]], 
+#  [[sinphi**3*nablanablaB[0, 1, 1] + cosphi**3*nablanablaB[1, 0, 0] + 
+#     cosphi**2*sinphi*(nablanablaB[0, 0, 0] - nablanablaB[1, 0, 1] - 
+#       nablanablaB[1, 1, 0]) - cosphi*sinphi**2*(nablanablaB[0, 0, 1] + 
+#       nablanablaB[0, 1, 0] - nablanablaB[1, 1, 1]), -(sinphi**3*nablanablaB[0, 1, 0]) + 
+#     cosphi**3*nablanablaB[1, 0, 1] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) + 
+#     cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]), -(sinphi**2*nablanablaB[0, 1, 2]) + 
+#     cosphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
+#       nablanablaB[1, 1, 2])], [-(sinphi**3*nablanablaB[0, 0, 1]) + 
+#     cosphi*sinphi**2*(nablanablaB[0, 0, 0] - nablanablaB[0, 1, 1] - 
+#       nablanablaB[1, 0, 1]) + cosphi**3*nablanablaB[1, 1, 0] + 
+#     cosphi**2*sinphi*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]), sinphi**3*nablanablaB[0, 0, 0] + 
+#     cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] + 
+#       nablanablaB[1, 0, 0]) + cosphi**2*sinphi*(nablanablaB[0, 1, 1] + 
+#       nablanablaB[1, 0, 1] + nablanablaB[1, 1, 0]) + cosphi**3*nablanablaB[1, 1, 1], 
+#    sinphi**2*nablanablaB[0, 0, 2] + cosphi*sinphi*(nablanablaB[0, 1, 2] + 
+#       nablanablaB[1, 0, 2]) + cosphi**2*nablanablaB[1, 1, 2]], 
+#   [-(sinphi**2*nablanablaB[0, 2, 1]) + cosphi**2*nablanablaB[1, 2, 0] + 
+#     cosphi*sinphi*(nablanablaB[0, 2, 0] - nablanablaB[1, 2, 1]), 
+#    sinphi**2*nablanablaB[0, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 1] + 
+#       nablanablaB[1, 2, 0]) + cosphi**2*nablanablaB[1, 2, 1], 
+#    sinphi*nablanablaB[0, 2, 2] + cosphi*nablanablaB[1, 2, 2]]], 
+#  [[cosphi**2*nablanablaB[2, 0, 0] - cosphi*sinphi*(nablanablaB[2, 0, 1] + 
+#       nablanablaB[2, 1, 0]) + sinphi**2*nablanablaB[2, 1, 1], 
+#    cosphi**2*nablanablaB[2, 0, 1] - sinphi**2*nablanablaB[2, 1, 0] + 
+#     cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]), 
+#    cosphi*nablanablaB[2, 0, 2] - sinphi*nablanablaB[2, 1, 2]], 
+#   [-(sinphi**2*nablanablaB[2, 0, 1]) + cosphi**2*nablanablaB[2, 1, 0] + 
+#     cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]), 
+#    sinphi**2*nablanablaB[2, 0, 0] + cosphi*sinphi*(nablanablaB[2, 0, 1] + 
+#       nablanablaB[2, 1, 0]) + cosphi**2*nablanablaB[2, 1, 1], 
+#    sinphi*nablanablaB[2, 0, 2] + cosphi*nablanablaB[2, 1, 2]], 
+#   [cosphi*nablanablaB[2, 2, 0] - sinphi*nablanablaB[2, 2, 1], 
+#    sinphi*nablanablaB[2, 2, 0] + cosphi*nablanablaB[2, 2, 1], nablanablaB[2, 2, 2]]
+#       ]])
+    
+     # TODO: test this calculation!
+     grad_grad_B_vector_cartesian = torch.zeros((3,3,3,self.nphi))
+     grad_grad_B_vector_cartesian[0,0,0] = (cosphi**3*nablanablaB[0, 0, 0] - cosphi**2*sinphi*(nablanablaB[0, 0, 1] + 
+      nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0]) + cosphi*sinphi**2*(nablanablaB[0, 1, 1] + nablanablaB[1, 0, 1] + 
+      nablanablaB[1, 1, 0]) - sinphi**3*nablanablaB[1, 1, 1])
+
+     grad_grad_B_vector_cartesian[0,0,1] = (cosphi**3*nablanablaB[0, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
       nablanablaB[0, 1, 1] - nablanablaB[1, 0, 1]) + sinphi**3*nablanablaB[1, 1, 0] - 
-    cosphi*sinphi**2*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]), cosphi**2*nablanablaB[0, 0, 2] - 
-    cosphi*sinphi*(nablanablaB[0, 1, 2] + nablanablaB[1, 0, 2]) + 
-    sinphi**2*nablanablaB[1, 1, 2]], [cosphi**3*nablanablaB[0, 1, 0] + 
+      cosphi*sinphi**2*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - nablanablaB[1, 1, 1])) 
+     
+     grad_grad_B_vector_cartesian[0,0,2] = (cosphi**2*nablanablaB[0, 0, 2] 
+                                            - cosphi*sinphi*(nablanablaB[0, 1, 2] + nablanablaB[1, 0, 2]) + 
+                                            sinphi**2*nablanablaB[1, 1, 2])
+     
+     grad_grad_B_vector_cartesian[0,1,0] = (cosphi**3*nablanablaB[0, 1, 0] + 
     sinphi**3*nablanablaB[1, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
       nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) - 
     cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]), cosphi**3*nablanablaB[0, 1, 1] - 
+      nablanablaB[1, 1, 1]))
+
+     grad_grad_B_vector_cartesian[0,1,1] = (cosphi**3*nablanablaB[0, 1, 1] - 
     sinphi**3*nablanablaB[1, 0, 0] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
       nablanablaB[1, 0, 1] - nablanablaB[1, 1, 0]) + 
     cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] - 
-      nablanablaB[1, 1, 1]), cosphi**2*nablanablaB[0, 1, 2] - 
+      nablanablaB[1, 1, 1]))
+
+     grad_grad_B_vector_cartesian[0,1,2] = (cosphi**2*nablanablaB[0, 1, 2] - 
     sinphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
-      nablanablaB[1, 1, 2])], [cosphi**2*nablanablaB[0, 2, 0] - 
+      nablanablaB[1, 1, 2]))
+
+     grad_grad_B_vector_cartesian[0,2,0] = (cosphi**2*nablanablaB[0, 2, 0] - 
     cosphi*sinphi*(nablanablaB[0, 2, 1] + nablanablaB[1, 2, 0]) + 
-    sinphi**2*nablanablaB[1, 2, 1], cosphi**2*nablanablaB[0, 2, 1] - 
+    sinphi**2*nablanablaB[1, 2, 1])
+
+     grad_grad_B_vector_cartesian[0,2,1] = (cosphi**2*nablanablaB[0, 2, 1] - 
     sinphi**2*nablanablaB[1, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 0] - 
-      nablanablaB[1, 2, 1]), cosphi*nablanablaB[0, 2, 2] - 
-    sinphi*nablanablaB[1, 2, 2]]], 
- [[sinphi**3*nablanablaB[0, 1, 1] + cosphi**3*nablanablaB[1, 0, 0] + 
+      nablanablaB[1, 2, 1]))
+
+     grad_grad_B_vector_cartesian[0,2,2] = (cosphi*nablanablaB[0, 2, 2] - sinphi*nablanablaB[1, 2, 2])
+
+     grad_grad_B_vector_cartesian[1,0,0] = (sinphi**3*nablanablaB[0, 1, 1] + cosphi**3*nablanablaB[1, 0, 0] + 
     cosphi**2*sinphi*(nablanablaB[0, 0, 0] - nablanablaB[1, 0, 1] - 
       nablanablaB[1, 1, 0]) - cosphi*sinphi**2*(nablanablaB[0, 0, 1] + 
-      nablanablaB[0, 1, 0] - nablanablaB[1, 1, 1]), -(sinphi**3*nablanablaB[0, 1, 0]) + 
+      nablanablaB[0, 1, 0] - nablanablaB[1, 1, 1]))
+
+     grad_grad_B_vector_cartesian[1,0,1] = (-(sinphi**3*nablanablaB[0, 1, 0]) + 
     cosphi**3*nablanablaB[1, 0, 1] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
       nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) + 
     cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]), -(sinphi**2*nablanablaB[0, 1, 2]) + 
+      nablanablaB[1, 1, 1]))
+
+     grad_grad_B_vector_cartesian[1,0,2] = (-(sinphi**2*nablanablaB[0, 1, 2]) + 
     cosphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
-      nablanablaB[1, 1, 2])], [-(sinphi**3*nablanablaB[0, 0, 1]) + 
+      nablanablaB[1, 1, 2]))
+
+     grad_grad_B_vector_cartesian[1,1,0] = (-(sinphi**3*nablanablaB[0, 0, 1]) + 
     cosphi*sinphi**2*(nablanablaB[0, 0, 0] - nablanablaB[0, 1, 1] - 
       nablanablaB[1, 0, 1]) + cosphi**3*nablanablaB[1, 1, 0] + 
     cosphi**2*sinphi*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]), sinphi**3*nablanablaB[0, 0, 0] + 
+      nablanablaB[1, 1, 1]))
+
+     grad_grad_B_vector_cartesian[1,1,1] = (sinphi**3*nablanablaB[0, 0, 0] + 
     cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] + 
       nablanablaB[1, 0, 0]) + cosphi**2*sinphi*(nablanablaB[0, 1, 1] + 
-      nablanablaB[1, 0, 1] + nablanablaB[1, 1, 0]) + cosphi**3*nablanablaB[1, 1, 1], 
-   sinphi**2*nablanablaB[0, 0, 2] + cosphi*sinphi*(nablanablaB[0, 1, 2] + 
-      nablanablaB[1, 0, 2]) + cosphi**2*nablanablaB[1, 1, 2]], 
-  [-(sinphi**2*nablanablaB[0, 2, 1]) + cosphi**2*nablanablaB[1, 2, 0] + 
-    cosphi*sinphi*(nablanablaB[0, 2, 0] - nablanablaB[1, 2, 1]), 
-   sinphi**2*nablanablaB[0, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 1] + 
-      nablanablaB[1, 2, 0]) + cosphi**2*nablanablaB[1, 2, 1], 
-   sinphi*nablanablaB[0, 2, 2] + cosphi*nablanablaB[1, 2, 2]]], 
- [[cosphi**2*nablanablaB[2, 0, 0] - cosphi*sinphi*(nablanablaB[2, 0, 1] + 
-      nablanablaB[2, 1, 0]) + sinphi**2*nablanablaB[2, 1, 1], 
-   cosphi**2*nablanablaB[2, 0, 1] - sinphi**2*nablanablaB[2, 1, 0] + 
-    cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]), 
-   cosphi*nablanablaB[2, 0, 2] - sinphi*nablanablaB[2, 1, 2]], 
-  [-(sinphi**2*nablanablaB[2, 0, 1]) + cosphi**2*nablanablaB[2, 1, 0] + 
-    cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]), 
-   sinphi**2*nablanablaB[2, 0, 0] + cosphi*sinphi*(nablanablaB[2, 0, 1] + 
-      nablanablaB[2, 1, 0]) + cosphi**2*nablanablaB[2, 1, 1], 
-   sinphi*nablanablaB[2, 0, 2] + cosphi*nablanablaB[2, 1, 2]], 
-  [cosphi*nablanablaB[2, 2, 0] - sinphi*nablanablaB[2, 2, 1], 
-   sinphi*nablanablaB[2, 2, 0] + cosphi*nablanablaB[2, 2, 1], nablanablaB[2, 2, 2]]
-      ]])
+      nablanablaB[1, 0, 1] + nablanablaB[1, 1, 0]) + cosphi**3*nablanablaB[1, 1, 1])
 
-    return grad_grad_B_vector_cartesian
+     grad_grad_B_vector_cartesian[1,1,2] = (sinphi**2*nablanablaB[0, 0, 2] + cosphi*sinphi*(nablanablaB[0, 1, 2] + 
+      nablanablaB[1, 0, 2]) + cosphi**2*nablanablaB[1, 1, 2])
+
+     grad_grad_B_vector_cartesian[1,2,0] = (-(sinphi**2*nablanablaB[0, 2, 1]) + cosphi**2*nablanablaB[1, 2, 0] + 
+    cosphi*sinphi*(nablanablaB[0, 2, 0] - nablanablaB[1, 2, 1]))
+
+     grad_grad_B_vector_cartesian[1,2,1] = (sinphi**2*nablanablaB[0, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 1] + 
+      nablanablaB[1, 2, 0]) + cosphi**2*nablanablaB[1, 2, 1])
+
+     grad_grad_B_vector_cartesian[1,2,1] = (sinphi*nablanablaB[0, 2, 2] + cosphi*nablanablaB[1, 2, 2])
+
+     grad_grad_B_vector_cartesian[2,0,0] = (cosphi**2*nablanablaB[2, 0, 0] - cosphi*sinphi*(nablanablaB[2, 0, 1] + 
+      nablanablaB[2, 1, 0]) + sinphi**2*nablanablaB[2, 1, 1])
+     grad_grad_B_vector_cartesian[2,0,1] = (cosphi**2*nablanablaB[2, 0, 1] - sinphi**2*nablanablaB[2, 1, 0] + 
+    cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]))
+     grad_grad_B_vector_cartesian[2,0,2] = (cosphi*nablanablaB[2, 0, 2] - sinphi*nablanablaB[2, 1, 2])
+     grad_grad_B_vector_cartesian[2,1,0] = (-(sinphi**2*nablanablaB[2, 0, 1]) + cosphi**2*nablanablaB[2, 1, 0] + 
+    cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]))
+     grad_grad_B_vector_cartesian[2,1,1] = (sinphi**2*nablanablaB[2, 0, 0] + cosphi*sinphi*(nablanablaB[2, 0, 1] + 
+      nablanablaB[2, 1, 0]) + cosphi**2*nablanablaB[2, 1, 1])
+     grad_grad_B_vector_cartesian[2,1,2] = (sinphi*nablanablaB[2, 0, 2] + cosphi*nablanablaB[2, 1, 2])
+     grad_grad_B_vector_cartesian[2,2,0] = cosphi*nablanablaB[2, 2, 0] - sinphi*nablanablaB[2, 2, 1]
+     grad_grad_B_vector_cartesian[2,2,1] = sinphi*nablanablaB[2, 2, 0] + cosphi*nablanablaB[2, 2, 1]
+     grad_grad_B_vector_cartesian[2,2,2] = nablanablaB[2, 2, 2]
+     
+     return grad_grad_B_vector_cartesian
