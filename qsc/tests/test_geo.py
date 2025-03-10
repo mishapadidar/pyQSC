@@ -31,13 +31,14 @@ def test_surface():
 
 def test_surface_tangents():
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", nphi=299, order='r2')
+    stel = Qsc.from_paper("precise QA", nphi=501, order='r2')
 
     minor_radius = 0.1
     ntheta = 512
     xyz = stel.surface(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     dxyz_by_dvarphi = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     dxyz_by_dtheta = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+    dxyz_by_dr = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     normal = stel.surface_normal(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     
     # test normal is orthogonal to tangent
@@ -57,15 +58,25 @@ def test_surface_tangents():
     print(err)
     assert err < 1e-4, "dsurface_by_dtheta incorrect"
 
-    # check dsurface/dvarphi with spline differentiation
-    dgamma_by_dvarphi_sd = np.zeros(np.shape(xyz))
-    for ii in range(ntheta):
-        spline = CubicSpline(stel.varphi.detach().numpy(), xyz[:,ii,:]).derivative()
-        dgamma_by_dvarphi_sd[:,ii,:] = spline(stel.varphi.detach().numpy())
-    err = np.max(np.abs(dxyz_by_dvarphi - dgamma_by_dvarphi_sd))
+    
+    # test dsurface_by_dr with central differences
+    dr = 1e-2
+    xyz_pdr = stel.surface(r=minor_radius + dr, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+    xyz_mdr = stel.surface(r=minor_radius - dr, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+    dxyz_by_dr_fd = (xyz_pdr - xyz_mdr) / (2 * dr)
+    err = np.max(np.abs(dxyz_by_dr - dxyz_by_dr_fd))
+    print(err)
+    assert err < 1e-4, "dsurface_by_dr incorrect"
+    
+    # test dsurface_by_dvarphi with central differences
+    dphi = 2 * np.pi / (stel.nfp * stel.nphi)
+    dxyz_by_dphi_fd = (xyz[2:,:,:] - xyz[:-2,:,:]) / (2 * dphi)
+    d_varphi_d_phi = stel.d_varphi_d_phi.detach().numpy()[1:-1].reshape((-1,1,1))
+    dxyz_by_dvarphi_fd = dxyz_by_dphi_fd / d_varphi_d_phi
+    err = np.max(np.abs(dxyz_by_dvarphi[1:-1,:,:] - dxyz_by_dvarphi_fd))
     print(err)
     assert err < 1e-4, "dsurface_by_dvarphi incorrect"
 
 if __name__ == "__main__":
-    test_surface()
+    # test_surface()
     test_surface_tangents()
