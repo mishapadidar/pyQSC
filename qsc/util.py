@@ -6,6 +6,7 @@ Various utility functions
 
 import logging
 import numpy as np
+import torch
 import scipy.optimize
 from qsc.fourier_interpolation import fourier_interpolation
 from scipy.interpolate import CubicSpline as spline
@@ -170,3 +171,61 @@ def finite_difference(f, x, eps=1e-6, *args, **kwargs):
         x[i] += eps
         jac_est.append((fx-fy)/(2*eps))
     return np.array(jac_est).T
+
+def finite_difference_torch(f, x, eps=1e-6, *args, **kwargs):
+    """Approximate jacobian with central difference. This function assumes that f
+    maps a torch tensor to another torch tensor.
+
+    Note:
+    You should always clone and detach x before passing it to this function to prevent
+    conflicts with aliasing and torch's autodiff graph.
+        finite_difference_torch(f, torch.clone(x).detach())
+
+    Args:
+        f (function): function to differentiate, can be scalar valued or multi-valued. Should
+            accept and return a torch tensor.
+        x (tensor): input to f(x) at which to take the gradient.
+        eps (float, optional): finite difference step size. Defaults to 1e-6.
+
+    Returns:
+        (tensor): finite difference gradient or jacobian.
+    """
+    x = torch.clone(x)
+    jac_est = []
+    for i in range(len(x)):
+        x[i] += eps
+        fx = f(x, *args, **kwargs)
+        x[i] -= 2*eps
+        fy = f(x, *args, **kwargs)
+        x[i] += eps
+        jac_est.append((fx-fy)/(2*eps))
+    jac = torch.stack(jac_est)
+    if jac.ndim > 1:
+        return jac.T
+    else:
+        return jac
+
+def rotate_nfp(X, jj, nfp):
+    """Rotate a scalar or vector field X on a flux surface by jj field periods. Given say the normal 
+    vectors X to a flux surface on one field period, rotate_nfp(X, jj, nfp) will yield the normal vectors
+    on the other field periods.
+
+    Args:
+        X (tensor): 3D tensor, shape (nphi, ntheta, m) of values on a flux surface. m = 3 for vector
+            quantites such as normal vectors, and m = 1 for scalar fields such as sqrt{g}.
+        jj (int): number of field period rotations. 0 for no rotation, 1 for rotation by 2pi/nfp, etc.
+        nfp (int): number of field periods
+
+    Returns:
+        X: 3D tensor, shape (nphi, ntheta, m) of rotated values.
+    """
+    if jj == 0:
+        # just to not mess with signs etc
+        return X
+    
+    angle = torch.tensor(2 * torch.pi * jj / nfp)
+    Q = torch.tensor([[torch.cos(angle), -torch.sin(angle), 0],
+                    [torch.sin(angle), torch.cos(angle), 0],
+                    [0, 0, 1]]
+                    )
+    return torch.einsum('ij,klj->kli', Q, X)
