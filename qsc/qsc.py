@@ -32,13 +32,14 @@ class Qsc(torch.nn.Module):
         grad_grad_B_tensor_cylindrical, grad_grad_B_tensor_cartesian
     from .calculate_r2 import calculate_r2
     from .calculate_r3 import calculate_r3, calculate_shear
-    from .mercier import mercier
     from .geo import surface, dsurface_by_dvarphi, dsurface_by_dtheta, surface_normal
+    from .mercier import mercier
     from .r_singularity import calculate_r_singularity
     from .plot import plot, plot_boundary, get_boundary, B_fieldline, B_contour, plot_axis, flux_tube
     from .Frenet_to_cylindrical import Frenet_to_cylindrical, to_RZ
     from .to_vmec import to_vmec
     from .util import B_mag
+    from .virtual_casing import B_external_on_axis, B_taylor, B_external_on_axis_taylor
     from .configurations import from_paper, configurations
     from .objectives import Bfield_axis_mse, grad_B_tensor_cartesian_mse, total_derivative
     
@@ -129,6 +130,7 @@ class Qsc(torch.nn.Module):
         if self.order != 'r1':
             self.calculate_r2()
             if self.order == 'r3':
+                raise NotImplementedError("padidar needs to implement order r3. Use order r2 or r1 for now.")
                 self.calculate_r3()
     
     def get_dofs(self, as_tuple=False):

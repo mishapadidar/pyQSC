@@ -1,6 +1,6 @@
 
 import numpy as np
-from qsc import Qsc
+from qsc.qsc import Qsc
 import torch
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline

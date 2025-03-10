@@ -57,7 +57,7 @@ def solve_sigma_equation(self):
     """
     Solve the sigma equation.
     """
-    x0 = torch.tensor(np.full(self.nphi, self.sigma0))
+    x0 = self.sigma0 * torch.ones(self.nphi)
     x0[0] = 0 # Initial guess for iota
     """
     soln = scipy.optimize.root(self._residual, x0, jac=self._jacobian, method='lm')

@@ -117,6 +117,7 @@ def init_axis(self):
     for j in range(nphi):
         self.d_d_varphi[j,:] = self.d_d_phi[j,:] / self.d_varphi_d_phi[j]
 
+    # TODO: integrate this with scipy to see if it is dominating the error
     # Compute the Boozer toroidal angle:
     self.varphi = torch.zeros(nphi)
     for j in range(1, nphi):
@@ -124,7 +125,6 @@ def init_axis(self):
         self.varphi[j] = self.varphi[j-1] + (d_l_d_phi[j-1] + d_l_d_phi[j])
     self.varphi = self.varphi * (0.5 * d_phi * 2 * torch.pi / axis_length)
 
-    # TODO: test this block
     # Cartesian coordinates of axis
     self.XYZ0 = torch.stack((R0 * torch.cos(phi), R0 * torch.sin(phi), Z0)) # (3, nphi)
     # derivative of axis wrt phi
@@ -152,7 +152,7 @@ def init_axis(self):
     self.torsion = torsion
     self.X1s = torch.zeros(nphi)
     self.X1c = self.etabar / curvature
-    
+
     # TODO: fourier_minimum is not in torch yet
     self.min_R0 = fourier_minimum(self.R0.detach().numpy())
 

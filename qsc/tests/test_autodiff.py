@@ -1,6 +1,6 @@
 
 import numpy as np
-from qsc import Qsc
+from qsc.qsc import Qsc
 import torch
 
 def finite_difference(f, x, eps=1e-6, *args, **kwargs):
