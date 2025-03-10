@@ -46,6 +46,60 @@ def grad_B_tensor_cartesian_mse(self, gradB_target):
     loss = 0.5 * torch.sum(torch.sum((gradB - gradB_target)**2, dim=(0,1)) * dl) # scalar tensor
     return loss
 
+def downsample_axis(self, nphi):
+    """This convenience function computes the Cartesian axis coordinates and derivatives of the
+    arc length at evenly spaced (in phi) points along the magnetic axis.
+
+    Args:
+        nphi (int): number of quadrature points
+
+    Returns:
+        (tensor): (3, nphi) tensor of points along in the axis.
+        (tensor): (nphi,) tensor of derivatives of the arclength at the quadrature points.
+    """
+    phi = torch.tensor(np.linspace(0, 2 * torch.pi / self.nfp, nphi, endpoint=False))
+    R0 = torch.zeros(nphi)
+    Z0 = torch.zeros(nphi)
+    R0p = torch.zeros(nphi)
+    Z0p = torch.zeros(nphi)
+    for jn in range(0, self.nfourier):
+        n = jn * self.nfp
+        sinangle = torch.sin(n * phi)
+        cosangle = torch.cos(n * phi)
+        R0 += self.rc[jn] * cosangle + self.rs[jn] * sinangle
+        Z0 += self.zc[jn] * cosangle + self.zs[jn] * sinangle
+        R0p += self.rc[jn] * (-n * sinangle) + self.rs[jn] * (n * cosangle)
+        Z0p += self.zc[jn] * (-n * sinangle) + self.zs[jn] * (n * cosangle)
+
+    # Cartesian coords
+    xyz = torch.stack((R0 * torch.cos(phi), R0 * torch.sin(phi), Z0)) # (3, nphi)
+    d_l_d_phi = torch.sqrt(R0 * R0 + R0p * R0p + Z0p * Z0p)
+    return xyz, d_l_d_phi
+
+def B_external_on_axis_mse(self, B_target, r, ntheta=128, ntarget=32):
+    '''
+    Integrated mean-squared error between the Cartesian external magnetic field on axis
+    and a target magnetic field over the magnetic axis,
+            Loss = (1/2) int |B - B_target|**2 dl
+    B is computed by the virtual casing integral by integrating over a surface of
+    radius r.
+
+    Args:
+        B_target: (3, nphi) tensor of target magnetic field values.
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        ntarget (int, optional): number of points on the magnetic axis at which to evaluate
+            the external field. Defaults to 32.
+    Returns:
+        (tensor): (1,) Loss value as a scalar tensor.
+    '''
+    X_target, d_l_d_phi = self.downsample_axis(ntarget)
+    Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, X_target = X_target.T) # (3, nphi)
+    dphi = torch.diff(self.phi)[0]
+    dl = d_l_d_phi * dphi # (nphi,)
+    loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
+    return loss
+
 def total_derivative(self, loss):
     """Get the total derivative of a loss function with respect to the DOFs.
         dloss/dx = dloss/d(sigma,iota) * d(sigma,iota)/dx + dloss/dx
