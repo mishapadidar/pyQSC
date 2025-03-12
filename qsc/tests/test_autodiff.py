@@ -218,8 +218,170 @@ def test_sum_loss():
     print('dloss/detabar err', err.item())
 
 
+def test_r2_derivatives():
+    """
+    Test the derivatives of the r2 quantities.
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", order='r2')
+    rc0 = torch.clone(stel.rc).detach()
+    zs0 = torch.clone(stel.zs).detach()
+    etabar0 = torch.clone(stel.etabar).detach()
+
+    """ Derivatives of X20 """
+    loss = torch.mean(stel.X20**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.X20**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dX20/drc err', err.item())
+    assert err.item() < 1e-4, "dX20/drc incorrect"
+
+    # check zs gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.X20**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dX20/dzs err', err.item())
+    assert err.item() < 1e-4, "dX20/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.X20**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dX20/detabar err', err.item())
+    assert err.item() < 1e-4, "dX20/detabar incorrect"
+
+    """ Derivatives of X2c """
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    loss = torch.mean(stel.X2c**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dX2c/drc err', err.item())
+    assert err.item() < 1e-4, "dX2c/drc incorrect"
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dX2c/dzs err', err.item())
+    assert err.item() < 1e-4, "dX2c/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dX2c/detabar err', err.item())
+    assert err.item() < 1e-4, "dX2c/detabar incorrect"
+
+    """ Derivatives of Y2s """
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    loss = torch.mean(stel.Y2s**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dY2s/drc err', err.item())
+    assert err.item() < 1e-4, "dY2s/drc incorrect"
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dY2s/dzs err', err.item())
+    assert err.item() < 1e-4, "dY2s/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dY2s/detabar err', err.item())
+    assert err.item() < 1e-4, "dY2s/detabar incorrect"
+
 if __name__ == "__main__":
     # test_sigma_iota_derivatives()
     # test_Bfield_axis_mse()
     # test_grad_B_tensor_cartesian_mse()
-    test_sum_loss()
+    # test_sum_loss()
+    test_r2_derivatives()
