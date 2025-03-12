@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from simsopt.geo import create_equally_spaced_curves
 from simsopt.field import Current, coils_via_symmetries, BiotSavart
-from qsc.simsopt_objectives import FieldError, QscOptimizable, ExternalFieldError, IotaPenalty
+from qsc.simsopt_objectives import FieldError, QscOptimizable, ExternalFieldError, IotaPenalty, AxisLengthPenalty
 from scipy.optimize import approx_fprime
 from qsc.util import finite_difference
 
@@ -188,8 +188,7 @@ def test_IotaPenalty():
     x0 = ip.x
 
     # compute derivatives
-    partials = ip.dJ()
-    dJ_by_dqsc = partials(stel)
+    dJ_by_dqsc = ip.dJ()
 
     # check derivative w.r.t. axis dofs w/ finite difference
     def fun(x):
@@ -200,7 +199,28 @@ def test_IotaPenalty():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
+def test_AxisLengthPenalty():
+        # set up the expansion
+    stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=99)
+    ip = AxisLengthPenalty(stel, 1.221)
+    stel.unfix_all()
+    ip.unfix_all()
+    x0 = ip.x
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ()
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(x):
+        stel.x = x
+        return ip.J().detach().numpy()
+    dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-4)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
+    print(err)
+    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+
 if __name__ == "__main__":
     test_FieldError()
     test_ExternalFieldError()
     test_IotaPenalty()
+    test_AxisLengthPenalty()

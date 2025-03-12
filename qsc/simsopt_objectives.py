@@ -51,8 +51,6 @@ class FieldError(Optimizable):
         self.qsc = qsc
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
-    # TODO: use derivative decorator
-    # TODO: change name to J()
     def field_error(self):
         """
         Sum-of-squares error in the field:
@@ -70,15 +68,13 @@ class FieldError(Optimizable):
         loss = self.qsc.Bfield_axis_mse(torch.tensor(B_coil))
         return loss
 
-    # TODO: use derivative decorator
-    # TODO: change name to dJ()
     def dfield_error(self):
         """
         Derivative of the field error w.r.t all coil coeffs,
             axis coefs, and etabar.
 
         return: SIMSOPT Derivative object containing the derivatives
-            of the field_error function with respect to the BiotSavart
+            of the .J function with respect to the BiotSavart
             and Expansion DOFs.
         """
         self.qsc.calculate_or_cache()
@@ -129,6 +125,23 @@ class FieldError(Optimizable):
 
         return dJ
     
+    def J(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        return self.field_error()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dfield_error()
+    
 class ExternalFieldError(Optimizable):
     def __init__(self, bs, qsc, r, ntheta=128, ntarget=32):
         """
@@ -142,7 +155,6 @@ class ExternalFieldError(Optimizable):
         self.ntarget = ntarget
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
-    # TODO: change name to J()
     def field_error(self):
         """
         Sum-of-squares error in the virtual-casing field:
@@ -162,15 +174,13 @@ class ExternalFieldError(Optimizable):
         loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, ntarget=self.ntarget)
         return loss
 
-    # TODO: use derivative decorator
-    # TODO: change name to dJ()
     def dfield_error(self):
         """
         Derivative of the field error w.r.t all coil coeffs,
             axis coefs, and etabar.
 
         return: SIMSOPT Derivative object containing the derivatives
-            of the field_error function with respect to the BiotSavart
+            of the .J function with respect to the BiotSavart
             and Expansion DOFs.
         """
         self.qsc.calculate_or_cache()
@@ -218,6 +228,23 @@ class ExternalFieldError(Optimizable):
         dJ = dJ_by_daxis + dJ_by_dbs
 
         return dJ
+
+    def J(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        return self.field_error()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dfield_error()
     
 class IotaPenalty(Optimizable):
     def __init__(self, qsc, iota_target):
@@ -242,7 +269,50 @@ class IotaPenalty(Optimizable):
         loss = 0.5 * ((self.qsc.iota - self.iota_target) / self.iota_target)**2
         return loss
     
-    # TODO: use derivative decorator
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        self.qsc.calculate_or_cache()
+        loss = self.J()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+        # arr = np.array([g.detach().numpy().flatten() for g in dloss_by_ddofs]) # array
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+class AxisLengthPenalty(Optimizable):
+    def __init__(self, qsc, target_length):
+        """Penalty function
+            1/2 * ((length(axis) - target_length) / target_length)^2
+        where the length is the total axis length (over all field periods).
+
+        Args:
+            qsc (Optimizable, Qsc):
+            target_length (float): target value of length
+        """
+        self.qsc = qsc
+        self.target_length = target_length
+        Optimizable.__init__(self, depends_on=[qsc])
+    
+    def J(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        self.qsc.calculate_or_cache()
+        loss = 0.5 * ((self.qsc.axis_length - self.target_length) / self.target_length)**2
+        return loss
+    
+    @derivative_dec
     def dJ(self):
         """Compute the gradient of the objective function.
 
