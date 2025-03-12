@@ -16,10 +16,30 @@ logger = logging.getLogger(__name__)
 
 class QscOptimizable(Qsc, Optimizable):
     def __init__(self, *args, **kwargs):
+
+        # for caching
+        self.need_to_run_code = True
+
         Qsc.__init__(self, *args, **kwargs)
         Optimizable.__init__(self, x0=Qsc.get_dofs(self),
                              external_dof_setter=Qsc.set_dofs,
                              names=self.names)
+        
+    def recompute_bell(self, parent=None):
+        """
+        This function will get called any time any of the DOFs of the
+        parent class change.
+        """
+        self.need_to_run_code = True
+        return super().recompute_bell(parent)
+
+    def calculate_or_cache(self):
+        """Run the calculate() method, only if need_to_run_code is True.
+        """
+        if self.need_to_run_code:
+            self.calculate()
+            self.need_to_run_code = False
+
 
 class FieldError(Optimizable):
     def __init__(self, bs, qsc):
@@ -31,12 +51,15 @@ class FieldError(Optimizable):
         self.qsc = qsc
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
+    # TODO: use derivative decorator
+    # TODO: change name to J()
     def field_error(self):
         """
         Sum-of-squares error in the field:
             (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi
         where the integral is taken along the axis.
         """
+        self.qsc.calculate_or_cache()
         # evaluate coil field
         xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
         xyz = np.ascontiguousarray(xyz)
@@ -47,6 +70,8 @@ class FieldError(Optimizable):
         loss = self.qsc.Bfield_axis_mse(torch.tensor(B_coil))
         return loss
 
+    # TODO: use derivative decorator
+    # TODO: change name to dJ()
     def dfield_error(self):
         """
         Derivative of the field error w.r.t all coil coeffs,
@@ -56,6 +81,7 @@ class FieldError(Optimizable):
             of the field_error function with respect to the BiotSavart
             and Expansion DOFs.
         """
+        self.qsc.calculate_or_cache()
         # Qsc field
         B_qsc = self.qsc.Bfield_cartesian().T.detach().numpy() # (nphi, 3)
 
@@ -116,12 +142,14 @@ class ExternalFieldError(Optimizable):
         self.ntarget = ntarget
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
+    # TODO: change name to J()
     def field_error(self):
         """
         Sum-of-squares error in the virtual-casing field:
             (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi
         where the integral is taken along the axis.
         """
+        self.qsc.calculate_or_cache()
         # evaluate coil field
         X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, nphi)
         X_target_np = X_target.detach().numpy().T # (nphi, 3)
@@ -134,6 +162,8 @@ class ExternalFieldError(Optimizable):
         loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, ntarget=self.ntarget)
         return loss
 
+    # TODO: use derivative decorator
+    # TODO: change name to dJ()
     def dfield_error(self):
         """
         Derivative of the field error w.r.t all coil coeffs,
@@ -143,6 +173,7 @@ class ExternalFieldError(Optimizable):
             of the field_error function with respect to the BiotSavart
             and Expansion DOFs.
         """
+        self.qsc.calculate_or_cache()
         # Qsc field
         X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
         B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, X_target = X_target.T).T.detach().numpy() # (ntarget, 3)
@@ -187,3 +218,45 @@ class ExternalFieldError(Optimizable):
         dJ = dJ_by_daxis + dJ_by_dbs
 
         return dJ
+    
+class IotaPenalty(Optimizable):
+    def __init__(self, qsc, iota_target):
+        """Penalty function
+            1/2 * ((iota - iota_target) / iota_target)^2
+
+        Args:
+            qsc (Optimizable, Qsc):
+            iota_target (float): target value of iota
+        """
+        self.qsc = qsc
+        self.iota_target = iota_target
+        Optimizable.__init__(self, depends_on=[qsc])
+    
+    def J(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        self.qsc.calculate_or_cache()
+        loss = 0.5 * ((self.qsc.iota - self.iota_target) / self.iota_target)**2
+        return loss
+    
+    # TODO: use derivative decorator
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        self.qsc.calculate_or_cache()
+        loss = self.J()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+        # arr = np.array([g.detach().numpy().flatten() for g in dloss_by_ddofs]) # array
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
