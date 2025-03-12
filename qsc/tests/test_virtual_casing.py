@@ -3,6 +3,7 @@ import numpy as np
 from qsc.qsc import Qsc
 import torch
 import matplotlib.pyplot as plt
+from qsc.util import finite_difference
 
 
 def test_B_external_on_axis():
@@ -62,6 +63,39 @@ def test_B_external_on_axis():
     plt.legend(loc='upper left')
     plt.tight_layout()
     plt.show()
+
+def test_grad_B_external_on_axis():
+    """
+    Test the accuracy of the surface computation
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", nphi=511, order='r1')
+
+    minor_radius = 0.2
+    ntheta = 256
+    idx_target = range(0, stel.nphi, 64)
+    X_target = stel.XYZ0[:,idx_target].T
+
+    # single evaluation
+    with torch.no_grad():
+        grad_Bext_vc = stel.grad_B_external_on_axis(r=minor_radius, ntheta=ntheta, X_target = X_target) # (3, nphi)
+    grad_Bext_vc = grad_Bext_vc.detach().numpy()
+
+    # compute the derivative with finite difference
+    def fd_obj(X, ii):
+        X = torch.tensor(X).reshape((1,-1))
+        with torch.no_grad():
+            Bext_vc = stel.B_external_on_axis(r=minor_radius, ntheta=ntheta, X_target = X) # (3, nphi)
+        return Bext_vc.detach().numpy()
+    
+    grad_Bext_fd = np.zeros(np.shape(grad_Bext_vc))
+    for ii, x in enumerate(X_target.detach().numpy()):
+        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-3, ii=ii)[0]
+
+    err = grad_Bext_vc - grad_Bext_fd
+    print(np.max(np.abs(err)))
+    assert np.max(np.abs(err)) < 1e-5, "grad_B_external is incorrect"
+
 
 def test_n_cross_B():
     # set up the expansion
@@ -144,5 +178,6 @@ def test_n_cross_B():
 
 
 if __name__ == "__main__":
-    test_B_external_on_axis()
-    test_n_cross_B()
+    # test_B_external_on_axis()
+    # test_n_cross_B()
+    test_grad_B_external_on_axis()

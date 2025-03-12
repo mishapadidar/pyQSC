@@ -190,3 +190,84 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=128, X_target=[]):
         B_ext[ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dA * dvarphi_by_dphi * dtheta * dphi, dim=(0,1)) # (3,)
 
     return B_ext.T
+
+
+def grad_B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
+    """Compute grad_B_external on the magnetic axis using the virtual casing principle.
+
+    This function calculates the gradient of the external magnetic field by evaluating
+    a surface integral over a flux surface. The integral uses the virtual casing principle
+    where the surface current is represented as:
+        j(x') = I * (partial r / partial varphi) - G * (partial r / partial theta)
+    
+    The gradient of B_external at a point x is computed through numerical integration of:
+        grad B_external(x) = (1/4π) ∮ (grad k) x j dS'
+
+    over a flux surface. grad k is the gradient of the Biot-Savart kernel, k(r,r') = (r-r')/|r-r'|^3,
+        grad k(r,r') = I / |r-r'|^3 - 3 (r - r') (r-r')^T / |r-r'|^5.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
+            of radius r at which to evaluate B_external. The points do not necessarily need
+            to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
+            axis, uniformly spaced in the axis cylindrical phi.
+    Returns:
+        (tensor): (3, 3, n) tensor of evaluations of B_external. 
+            The gradient is a symmetric matrix at each target point.
+    """
+    if len(X_target) == 0:
+        X_target = self.XYZ0.T # (nphi, 3)
+    n_target = len(X_target)
+
+    I = 0.0
+    G = self.G0
+    if self.order != 'r1':
+        I += r**2 * self.I2
+        G += r**2 * self.G2
+
+    g = self.surface(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+    gtheta = self.dsurface_by_dtheta(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+    gphi = self.dsurface_by_dvarphi(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+
+    # get surface and tangents across all nfp
+    dr_by_dtheta = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    dr_by_dvarphi = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    for ii in range(self.nfp):
+        g = rotate_nfp(g, ii, self.nfp)
+        gtheta = rotate_nfp(gtheta, ii, self.nfp)
+        gphi = rotate_nfp(gphi, ii, self.nfp)
+        gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
+        dr_by_dtheta[ii * self.nphi : (ii+1) * self.nphi] = gtheta
+        dr_by_dvarphi[ii * self.nphi : (ii+1) * self.nphi] = gphi
+
+    dtheta = 2 * torch.pi / ntheta
+    dphi = torch.diff(self.phi)[0]
+    dvarphi_by_dphi = self.d_varphi_d_phi
+    dvarphi_by_dphi = torch.concatenate([dvarphi_by_dphi for ii in range(self.nfp)]).flatten().reshape((-1,1,1))
+
+    eye = torch.eye(3)
+    def B_ext_of_phi(ii, jj):
+        """ Compute B_external by integrating over the entire device. """
+
+        # biot-savart kernel
+        rprime = X_target[ii] - gamma_surf # (nphi, ntheta, 3)
+        norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
+        norm_rprime_fifth = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**5) # (nphi, ntheta, 1)
+        # print((eye[jj].reshape((1,1,-1))/norm_rprime_cubed).shape)
+        # print((rprime[:,:,jj][:,:,None]).shape)
+        dkernel_by_djj = eye[jj].reshape((1,1,-1))/norm_rprime_cubed - 3 * rprime * rprime[:,:,jj][:,:,None] / norm_rprime_fifth
+
+        # cross product
+        diff = I * dr_by_dvarphi - G * dr_by_dtheta
+        integrand = torch.linalg.cross(dkernel_by_djj, diff, dim=-1) # (nphi, ntheta, 3)
+
+        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dvarphi_by_dphi *  dtheta * dphi, dim=(0,1)) # (3,)
+
+        return integral
+    
+    B_ext = torch.stack([B_ext_of_phi(ii, jj) for jj in range(3) for ii in range(n_target)]).T
+    B_ext = B_ext.reshape((3, 3, -1))
+    return B_ext

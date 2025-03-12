@@ -39,7 +39,7 @@ class Qsc(torch.nn.Module):
     from .Frenet_to_cylindrical import Frenet_to_cylindrical, to_RZ
     from .to_vmec import to_vmec
     from .util import B_mag
-    from .virtual_casing import B_external_on_axis, B_taylor, B_external_on_axis_taylor
+    from .virtual_casing import B_external_on_axis, B_taylor, B_external_on_axis_taylor, grad_B_external_on_axis
     from .configurations import from_paper, configurations
     from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, total_derivative,
                              B_external_on_axis_mse, downsample_axis)
