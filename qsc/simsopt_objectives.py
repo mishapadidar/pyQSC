@@ -126,12 +126,12 @@ class FieldError(Optimizable):
         return dJ
     
     def J(self):
-        """Compute the objective function.
+        """Compute the objective function, returning a float.
 
         Returns:
-            tensor: float tensor with objective function value.
+            float: objective function value.
         """
-        return self.field_error()
+        return self.field_error().detach().numpy().item()
     
     @derivative_dec
     def dJ(self):
@@ -230,12 +230,12 @@ class ExternalFieldError(Optimizable):
         return dJ
 
     def J(self):
-        """Compute the objective function.
+        """Compute the objective function, returning a float.
 
         Returns:
-            tensor: float tensor with objective function value.
+            float: objective function value.
         """
-        return self.field_error()
+        return self.field_error().detach().numpy().item()
     
     @derivative_dec
     def dJ(self):
@@ -258,8 +258,8 @@ class IotaPenalty(Optimizable):
         self.qsc = qsc
         self.iota_target = iota_target
         Optimizable.__init__(self, depends_on=[qsc])
-    
-    def J(self):
+
+    def penalty(self):
         """Compute the objective function.
 
         Returns:
@@ -269,15 +269,14 @@ class IotaPenalty(Optimizable):
         loss = 0.5 * ((self.qsc.iota - self.iota_target) / self.iota_target)**2
         return loss
     
-    @derivative_dec
-    def dJ(self):
+    def dpenalty(self):
         """Compute the gradient of the objective function.
 
         Returns:
-            array: gradient of the objective function as an np arrray.
+            Derivative: Simsopt Derivative object.
         """
         self.qsc.calculate_or_cache()
-        loss = self.J()
+        loss = self.penalty()
         dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
         # make a derivative object
@@ -287,6 +286,23 @@ class IotaPenalty(Optimizable):
         # arr = np.array([g.detach().numpy().flatten() for g in dloss_by_ddofs]) # array
         dJ_by_daxis = Derivative({self.qsc: derivs_axis})
         return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.penalty().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dpenalty()
     
 class AxisLengthPenalty(Optimizable):
     def __init__(self, qsc, target_length):
@@ -302,7 +318,7 @@ class AxisLengthPenalty(Optimizable):
         self.target_length = target_length
         Optimizable.__init__(self, depends_on=[qsc])
     
-    def J(self):
+    def penalty(self):
         """Compute the objective function.
 
         Returns:
@@ -312,15 +328,14 @@ class AxisLengthPenalty(Optimizable):
         loss = 0.5 * ((self.qsc.axis_length - self.target_length) / self.target_length)**2
         return loss
     
-    @derivative_dec
-    def dJ(self):
+    def dpenalty(self):
         """Compute the gradient of the objective function.
 
         Returns:
-            array: gradient of the objective function as an np arrray.
+            Derivative: Simsopt Derivative object.
         """
         self.qsc.calculate_or_cache()
-        loss = self.J()
+        loss = self.penalty()
         dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
         # make a derivative object
@@ -330,3 +345,20 @@ class AxisLengthPenalty(Optimizable):
         # arr = np.array([g.detach().numpy().flatten() for g in dloss_by_ddofs]) # array
         dJ_by_daxis = Derivative({self.qsc: derivs_axis})
         return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.penalty().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dpenalty()

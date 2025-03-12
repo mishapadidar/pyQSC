@@ -46,8 +46,25 @@ class Qsc(torch.nn.Module):
     
     def __init__(self, rc, zs, rs=[], zc=[], nfp=1, etabar=1., sigma0=0., B0=1.,
                  I2=0., sG=1, spsi=1, nphi=61, B2s=0., B2c=0., p2=0., order="r1"):
-        """
-        Create a quasisymmetric stellarator.
+        """Initialize Qsc
+
+        Args:
+            rc (array-like): list of all rc parameters of the axis.
+            zs (array-like): list of all zs parameters of the axis.
+            rs (array-like, optional): list of all rs parameters of the axis. Defaults to [].
+            zc (array-like, optional): list of all zc parameters of the axis.. Defaults to [].
+            nfp (int, optional): number of field periods. Defaults to 1.
+            etabar (float, optional): etabar parameter. Defaults to 1..
+            sigma0 (float, optional): sigma0 parameter. Defaults to 0..
+            B0 (float, optional): axis field strength. Defaults to 1..
+            I2 (float, optional): I2 current parameter. Defaults to 0..
+            sG (int, optional): sign of G. Defaults to 1.
+            spsi (int, optional): sign of psi. Defaults to 1.
+            nphi (int, optional): number of quadrature points on the axis. Defaults to 61.
+            B2s (float, optional): Defaults to 0..
+            B2c (float, optional): Defaults to 0..
+            p2 (float, optional): p2 pressure parameter. Defaults to 0..
+            order (str, optional): expansion order. Defaults to "r1".
         """
         super().__init__()
 
