@@ -94,8 +94,7 @@ def B_external_on_axis_mse(self, B_target, r, ntheta=128):
     ntarget = B_target.shape[1]
     X_target, d_l_d_phi = self.downsample_axis(ntarget)
     Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, X_target = X_target.T) # (3, nphi)
-    # TODO: dphi should be in terms of ntarget.
-    dphi = torch.diff(self.phi)[0]
+    dphi = (2 * torch.pi / self.nfp) / ntarget
     dl = d_l_d_phi * dphi # (nphi,)
     loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
     return loss

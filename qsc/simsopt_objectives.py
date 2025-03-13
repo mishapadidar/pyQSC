@@ -195,7 +195,7 @@ class ExternalFieldError(Optimizable):
         B_coil = self.bs.B() # (ntarget, 3)
 
         # compute dl
-        dphi = np.diff(self.qsc.phi)[0]
+        dphi = (2 * torch.pi / self.qsc.nfp) / self.ntarget
         dl = (d_l_d_phi * dphi).detach().numpy().reshape((-1,1)) # (ntarget, 1)
 
         # derivative with respect to biot savart dofs
