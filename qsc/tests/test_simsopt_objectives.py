@@ -4,7 +4,8 @@ import torch
 import numpy as np
 from simsopt.geo import create_equally_spaced_curves
 from simsopt.field import Current, coils_via_symmetries, BiotSavart
-from qsc.simsopt_objectives import FieldError, QscOptimizable, ExternalFieldError, IotaPenalty, AxisLengthPenalty
+from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
+                                    IotaPenalty, AxisLengthPenalty)
 from scipy.optimize import approx_fprime
 from qsc.util import finite_difference
 
@@ -31,7 +32,6 @@ def test_FieldError():
 
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1')
-    stel.unfix_all()
 
     # from simsopt.geo import plot as sms_plot
     # import matplotlib.pyplot as plt
@@ -179,6 +179,74 @@ def test_ExternalFieldError():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
+
+def test_GradExternalFieldError():
+    """
+    Test the GradExternalFieldError class.
+    """
+
+    # configuration parameters
+    ncoils = 2
+    nfp = 2
+    is_stellsym = True
+    coil_major_radius = 1.0
+    coil_minor_radius = 0.5
+    coil_n_fourier_modes = 2
+    coil_current = 100000.0 
+
+    # initialize coils
+    base_curves = create_equally_spaced_curves(ncoils, nfp, stellsym=is_stellsym, R0=coil_major_radius,
+                                            R1=coil_minor_radius, order=coil_n_fourier_modes)
+    base_currents = [Current(1.0) * coil_current for i in range(ncoils)]
+    coils = coils_via_symmetries(base_curves, base_currents, nfp, stellsym=is_stellsym)
+    biot_savart = BiotSavart(coils)
+
+    # set up the expansion
+    stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=257)
+
+    fe = GradExternalFieldError(biot_savart, stel, r=0.3, ntheta=256, ntarget=16)
+
+    # keep the base point for finite-differences
+    fe.unfix_all()
+    x0 = fe.x
+
+    # compute derivatives
+    fe.unfix_all()
+    partials = fe.dfield_error()
+    dfe_by_dbs = partials(biot_savart)
+    dfe_by_dqsc = partials(stel)
+
+    # check derivative w.r.t. coil dofs w/ finite difference
+    fe.unfix_all()
+    fe.x = x0
+    fe.fix_all()
+    biot_savart.unfix_all()
+    x = biot_savart.x
+    def fun(x):
+        biot_savart.x = x
+        return fe.field_error().detach().numpy()
+    # dfe_by_dbs_fd = approx_fprime(x, fun, epsilon=1e-1)
+    dfe_by_dbs_fd = finite_difference(fun, x, 1e-6)
+    err = np.max(np.abs(dfe_by_dbs_fd - dfe_by_dbs))
+    print(err)
+    assert err < 1e-5, "FAIL: coil derivatives are incorrect"
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    fe.unfix_all()
+    fe.x = x0
+    fe.fix_all()
+    stel.unfix_all()
+    x = stel.x
+    def fun(x):
+        stel.x = x
+        return fe.field_error().detach().numpy()
+    with torch.no_grad():
+        dfe_by_dqsc_fd = finite_difference(fun, x, 1e-8)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dfe_by_dqsc))
+    print(err)
+    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+
+
 def test_IotaPenalty():
         # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=511)
@@ -222,5 +290,6 @@ def test_AxisLengthPenalty():
 if __name__ == "__main__":
     test_FieldError()
     test_ExternalFieldError()
+    test_GradExternalFieldError()
     test_IotaPenalty()
     test_AxisLengthPenalty()

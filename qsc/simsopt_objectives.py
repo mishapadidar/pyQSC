@@ -171,7 +171,7 @@ class ExternalFieldError(Optimizable):
         B_coil = self.bs.B().T # (3, nphi)
         
         # compute loss
-        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, ntarget=self.ntarget)
+        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta)
         return loss
 
     def dfield_error(self):
@@ -245,6 +245,127 @@ class ExternalFieldError(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dfield_error()
+
+class GradExternalFieldError(Optimizable):
+    def __init__(self, bs, qsc, r, ntheta=128, ntarget=32):
+        """        Integrated mean-squared error between the gradient of the external magnetic field on axis
+        and the gradient of the Biot Savart field over the magnetic axis,
+                Loss = (1/2) int |grad_B_external - grad_B_bs|**2 dl
+        grad_B_external is computed by the virtual casing integral by integrating over a surface of
+        radius r.
+
+        Args:
+            bs (BiotSavart object): Biot Savart object.
+            qsc (Optimizable, Qsc): Optimizable Qsc object for computing external field.
+            r (float): minor radius of the flux surface on which to take the virtual casing integral.
+            ntheta (int, optional): number of theta quadrature points. Defaults to 128.
+            ntarget (int, optional): number of target points on the magnetic axis at which to discretize
+                the objective function integral. Defaults to 32.
+        """
+        self.bs = bs
+        self.qsc = qsc
+        self.r = r
+        self.ntheta = ntheta
+        self.ntarget = ntarget
+        Optimizable.__init__(self, depends_on=[bs, qsc])
+
+    def field_error(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with the objective value.
+        """
+        self.qsc.calculate_or_cache()
+        # evaluate coil field
+        X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget)
+        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
+        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
+
+        self.bs.set_points(X_target_np)
+        grad_B_coil = self.bs.dB_by_dX().T # (3, 3, ntarget)
+
+        # compute loss
+        loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r, ntheta=self.ntheta)
+        return loss
+
+    def dfield_error(self):
+        """
+        Derivative of the field error w.r.t all coil coeffs,
+            axis coefs, and etabar.
+
+        Returns:
+            SIMSOPT Derivative object: containing the derivatives of the .field_error function 
+            with respect to the BiotSavart and Qsc DOFs.
+        """
+        self.qsc.calculate_or_cache()
+        # Qsc field
+        X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
+        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, X_target = X_target.T)
+        grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
+
+        # coil field
+        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
+        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
+        self.bs.set_points(X_target_np)
+        grad_B_coil = self.bs.dB_by_dX() # (ntarget, 3, 3)
+
+        # compute dl
+        # dphi = np.diff(self.qsc.phi)[0]
+        dphi = (2 * np.pi / self.qsc.nfp) / self.ntarget
+        dl = d_l_d_phi.detach().numpy().reshape((-1,1,1)) * dphi
+
+        # derivative with respect to biot savart dofs
+        v = np.ones(3)
+        vterm = (grad_B_coil - grad_B_qsc)*dl
+        _, dJ_by_dbs = self.bs.B_and_dB_vjp(v, vterm) # Derivative object
+        
+        """ Derivative w.r.t. axis coeffs """
+        # this part of the derivative treats B_coil as a constant, independent of the axis
+        loss = self.field_error()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # derivative of B_coil(xyz(axis_coeffs)) term
+        d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
+        term21 = np.einsum("ilj,ijkl->ik", (grad_B_coil - grad_B_qsc) * dl, d2B_by_dXdX_bs) # (ntarget, 3)
+        dofs = self.qsc.get_dofs(as_tuple=True)
+        term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
+
+        derivs_axis = np.zeros(0)
+        for ii, x in enumerate(dofs):
+            # sum the two parts of the derivative
+            dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
+
+            if term2[ii] is not None:
+                dJ_by_dx += term2[ii].detach().numpy()
+            
+            derivs_axis = np.append(derivs_axis, dJ_by_dx)
+
+        # make a derivative object
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+
+        dJ = dJ_by_daxis + dJ_by_dbs
+
+        return dJ
+
+    def J(self):
+        """Compute the objective function, returning a float. This function can be used for
+        optimization.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.field_error().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function as an array (not tensor). This function
+        can be used for optimization.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dfield_error()    
+
     
 class IotaPenalty(Optimizable):
     def __init__(self, qsc, iota_target):
