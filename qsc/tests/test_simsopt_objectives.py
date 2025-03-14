@@ -5,7 +5,7 @@ import numpy as np
 from simsopt.geo import create_equally_spaced_curves
 from simsopt.field import Current, coils_via_symmetries, BiotSavart
 from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
-                                    IotaPenalty, AxisLengthPenalty, LGradB, B20Penalty)
+                                    IotaPenalty, AxisLengthPenalty, LGradB, B20Penalty, MagneticWellPenalty)
 from scipy.optimize import approx_fprime
 from qsc.util import finite_difference
 
@@ -246,7 +246,6 @@ def test_GradExternalFieldError():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
-
 def test_IotaPenalty():
         # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=511)
@@ -261,7 +260,7 @@ def test_IotaPenalty():
     # check derivative w.r.t. axis dofs w/ finite difference
     def fun(x):
         stel.x = x
-        return ip.J().detach().numpy()
+        return ip.J()
     dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-6)
     err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
     print(err)
@@ -281,7 +280,7 @@ def test_AxisLengthPenalty():
     # check derivative w.r.t. axis dofs w/ finite difference
     def fun(x):
         stel.x = x
-        return ip.J().detach().numpy()
+        return ip.J()
     dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-4)
     err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
     print(err)
@@ -327,12 +326,33 @@ def test_B20Penalty():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
+def test_MagneticWellPenalty():
+    # set up the expansion
+    stel = QscOptimizable.from_paper("precise QA", order='r2', nphi=99)
+    ip = MagneticWellPenalty(stel, well_target=-100)
+    stel.unfix_all()
+    ip.unfix_all()
+    x0 = ip.x
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ()
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(x):
+        stel.x = x
+        return ip.J()
+    dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-9)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
+    print(err)
+    assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
+
 
 if __name__ == "__main__":
-    # test_FieldError()
-    # test_ExternalFieldError()
-    # test_GradExternalFieldError()
-    # test_IotaPenalty()
-    # test_AxisLengthPenalty()
+    test_FieldError()
+    test_ExternalFieldError()
+    test_GradExternalFieldError()
+    test_IotaPenalty()
+    test_AxisLengthPenalty()
     test_LGradB()
     test_B20Penalty()
+    test_MagneticWellPenalty()

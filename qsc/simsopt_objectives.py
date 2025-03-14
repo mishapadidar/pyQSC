@@ -659,3 +659,85 @@ class B20Penalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dobj()
+
+class MagneticWellPenalty(Optimizable):
+
+    def __init__(self, qsc, well_target):
+        """Magnetic Well Penalty objective from [1]
+                J = max(0, d^2 V / dpsi^2 - W)^2 / W^2 
+            where
+                V is the volume,
+                2 * pi * psi is the toroidal flux,
+                W is the target value of the magnetic well.
+            Typically, W is set to a negative value to provide a margin against instability.
+
+            Note that PyQSC must be run with order='r2' or order='r3' for this function to work.
+
+        [1]: Mapping the space of quasisymmetric stellarators using optimized near-axis expansion,
+            Landreman, (2022)
+        Args:
+            qsc (Optimizable, Qsc)
+            well_target (float): target value of the magnetic well.
+        """
+        self.qsc = qsc
+        self.well_target = torch.tensor(well_target)
+        # self.need_to_run_code = True
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    # TODO: set up caching
+    # def recompute_bell(self, parent=None):
+    #     """
+    #     This function will get called any time any of the DOFs of the
+    #     parent class change.
+    #     """
+    #     self.need_to_run_code = True
+    #     return super().recompute_bell(parent)
+
+    def obj(self):
+        """Compute the objective.
+
+        Returns:
+            tensor: float tensor of the objective value.
+        """
+        self.qsc.calculate_or_cache()
+        d2_volume_d_psi2 = self.qsc.d2_volume_d_psi2
+        zero = torch.tensor(0)
+        J = torch.max(zero, d2_volume_d_psi2 - self.well_target)**2 / (self.well_target**2)
+        return J
+
+    def dobj(self):
+        """Gradient of the obj function with respect to axis coefficients.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        self.qsc.calculate_or_cache()
+
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function as a numpy array.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
