@@ -148,7 +148,6 @@ class Qsc(torch.nn.Module):
         if self.order != 'r1':
             self.calculate_r2()
             if self.order == 'r3':
-                raise NotImplementedError("padidar needs to implement order r3. Use order r2 or r1 for now.")
                 self.calculate_r3()
     
     def get_dofs(self, as_tuple=False):

@@ -137,7 +137,7 @@ def dsurface_by_dvarphi(self, r, ntheta=64):
             dY3c3_untwisted_by_dvarphi = 0.0 # Y3c3 is hardcoded to zero in PyQSC
             dY3s3_untwisted_by_dvarphi = 0.0 # Y3s3 is hardcoded to zero in PyQSC
             dZ3c1_untwisted_by_dvarphi = 0.0 # Z3c1 is hardcoded to zero in PyQSC
-            dZ3s1_untwisted_by_dvarphi = 0.0 # Z3cs is hardcoded to zero in PyQSC
+            dZ3s1_untwisted_by_dvarphi = 0.0 # Z3s1 is hardcoded to zero in PyQSC
             dZ3c3_untwisted_by_dvarphi = 0.0 # Z3c3 is hardcoded to zero in PyQSC
             dZ3s3_untwisted_by_dvarphi = 0.0 # Z3s3 is hardcoded to zero in PyQSC
 

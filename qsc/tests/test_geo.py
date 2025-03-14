@@ -11,7 +11,7 @@ def test_surface():
     Test the accuracy of the surface computation
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", order='r2')
+    stel = Qsc.from_paper("precise QA", order='r3')
 
     minor_radius = 0.1
     ntheta = 16
@@ -24,14 +24,14 @@ def test_surface():
     # sanity check plot
     ax = plt.figure().add_subplot(projection='3d')
     ax.plot_wireframe(xyz[:,:,0], xyz[:,:,1], xyz[:,:,2], alpha=0.2) # ours
-    ax.quiver(xyz[:,:,0], xyz[:,:,1], xyz[:,:,2], normal[:,:,0], normal[:,:,1], normal[:,:,2], alpha=0.2) # ours
+    # ax.quiver(xyz[:,:,0], xyz[:,:,1], xyz[:,:,2], normal[:,:,0], normal[:,:,1], normal[:,:,2], alpha=0.2) # ours
 
     ax.plot_wireframe(X, Y, Z, alpha=0.2, color='orange') # qsc
     plt.show()
 
 def test_surface_tangents():
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", nphi=501, order='r2')
+    stel = Qsc.from_paper("precise QA", nphi=513, order='r3')
 
     minor_radius = 0.1
     ntheta = 512
@@ -60,7 +60,7 @@ def test_surface_tangents():
 
     
     # test dsurface_by_dr with central differences
-    dr = 1e-2
+    dr = 1e-3
     xyz_pdr = stel.surface(r=minor_radius + dr, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     xyz_mdr = stel.surface(r=minor_radius - dr, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     dxyz_by_dr_fd = (xyz_pdr - xyz_mdr) / (2 * dr)
