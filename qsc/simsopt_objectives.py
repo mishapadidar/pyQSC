@@ -483,3 +483,179 @@ class AxisLengthPenalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dpenalty()
+    
+class LGradB(Optimizable):
+
+    def __init__(self, qsc):
+        """L-GradB objective from [1]
+                J = I / (2 * L)
+            where
+                I = int |dB_by_dX|^2 dl
+        and L is the axis length and the integral is taken over one field period.
+
+        [1]: Mapping the space of quasisymmetric stellarators using optimized near-axis expansion,
+            Landreman, (2022)
+        Args:
+            qsc (Optimizable, Qsc):
+        """
+        self.qsc = qsc
+        # self.need_to_run_code = True
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    # TODO: set up caching
+    # def recompute_bell(self, parent=None):
+    #     """
+    #     This function will get called any time any of the DOFs of the
+    #     parent class change.
+    #     """
+    #     self.need_to_run_code = True
+    #     return super().recompute_bell(parent)
+
+    def obj(self):
+        """Compute the objective.
+
+        Returns:
+            tensor: float tensor of the objective value.
+        """
+        self.qsc.calculate_or_cache()
+        grad_B = self.qsc.grad_B_tensor_cartesian() # (3, 3, nphi)
+
+        # compute dl
+        dphi = np.diff(self.qsc.phi)[0]
+        d_l_d_phi = self.qsc.d_l_d_phi # (nphi,)
+        dl = d_l_d_phi * dphi
+
+        axis_length = self.qsc.axis_length
+        integral = torch.sum(torch.einsum('ijk->k', grad_B**2) * dl)
+        J = integral / axis_length / 2
+        return J
+
+    def dobj(self):
+        """Gradient of the obj function with respect to axis coefficients.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        self.qsc.calculate_or_cache()
+
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function as a numpy array.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
+    
+
+class B20Penalty(Optimizable):
+
+    def __init__(self, qsc):
+        """f_B2 objective from [1]
+                J = I / (2 * L)
+            where
+                I = int (B20 - mu)^2 dl
+                mu = (1 / L) * int B20 dl.
+            The objective measures the variance of B20. When B20 is constant, the stellarator is
+            quasi-symmetric to second order. L is the axis length and the integral is taken over 
+            one field period.
+
+            Note that PyQSC must be run with order='r2' or order='r3' for this function to work.
+
+        [1]: Mapping the space of quasisymmetric stellarators using optimized near-axis expansion,
+            Landreman, (2022)
+        Args:
+            qsc (Optimizable, Qsc):
+        """
+        self.qsc = qsc
+        # self.need_to_run_code = True
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    # TODO: set up caching
+    # def recompute_bell(self, parent=None):
+    #     """
+    #     This function will get called any time any of the DOFs of the
+    #     parent class change.
+    #     """
+    #     self.need_to_run_code = True
+    #     return super().recompute_bell(parent)
+
+    def obj(self):
+        """Compute the objective.
+
+        Returns:
+            tensor: float tensor of the objective value.
+        """
+        self.qsc.calculate_or_cache()
+        B20 = self.qsc.B20
+
+        # compute dl
+        dphi = np.diff(self.qsc.phi)[0]
+        d_l_d_phi = self.qsc.d_l_d_phi # (nphi,)
+        dl = d_l_d_phi * dphi
+        axis_length = self.qsc.axis_length
+
+        # compute the mean
+        mu = torch.sum(B20 * dl) / axis_length
+
+        # compute the variance
+        integral = torch.sum((B20 - mu)**2 * dl)
+        J = integral / axis_length / 2
+        return J
+
+    def dobj(self):
+        """Gradient of the obj function with respect to axis coefficients.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        self.qsc.calculate_or_cache()
+
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function as a numpy array.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()

@@ -5,7 +5,7 @@ import numpy as np
 from simsopt.geo import create_equally_spaced_curves
 from simsopt.field import Current, coils_via_symmetries, BiotSavart
 from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
-                                    IotaPenalty, AxisLengthPenalty)
+                                    IotaPenalty, AxisLengthPenalty, LGradB, B20Penalty)
 from scipy.optimize import approx_fprime
 from qsc.util import finite_difference
 
@@ -268,7 +268,7 @@ def test_IotaPenalty():
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
 def test_AxisLengthPenalty():
-        # set up the expansion
+    # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=99)
     ip = AxisLengthPenalty(stel, 1.221)
     stel.unfix_all()
@@ -287,9 +287,52 @@ def test_AxisLengthPenalty():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
+def test_LGradB():
+    # set up the expansion
+    stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=99)
+    ip = LGradB(stel)
+    stel.unfix_all()
+    ip.unfix_all()
+    x0 = ip.x
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ()
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(x):
+        stel.x = x
+        return ip.J()
+    dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-7)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
+    print(err)
+    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+
+def test_B20Penalty():
+    # set up the expansion
+    stel = QscOptimizable.from_paper("precise QA", order='r2', nphi=99)
+    ip = B20Penalty(stel)
+    stel.unfix_all()
+    ip.unfix_all()
+    x0 = ip.x
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ()
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(x):
+        stel.x = x
+        return ip.J()
+    dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-8)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
+    print(err)
+    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+
+
 if __name__ == "__main__":
-    test_FieldError()
-    test_ExternalFieldError()
-    test_GradExternalFieldError()
-    test_IotaPenalty()
-    test_AxisLengthPenalty()
+    # test_FieldError()
+    # test_ExternalFieldError()
+    # test_GradExternalFieldError()
+    # test_IotaPenalty()
+    # test_AxisLengthPenalty()
+    test_LGradB()
+    test_B20Penalty()
