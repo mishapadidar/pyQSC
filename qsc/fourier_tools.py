@@ -5,7 +5,7 @@ from torch.fft import fft, fftfreq, fft2, ifft
 torch.set_default_dtype(torch.float64)
 
 
-def fourier_interp(fx, points, period = 1.0):
+def fourier_interp1d(fx, points, period = 1.0):
     """Fourier interpolation on [0, period) interval.
 
     Args:
@@ -23,7 +23,7 @@ def fourier_interp(fx, points, period = 1.0):
     eikx = torch.exp(2.j * torch.pi * torch.outer(points, kn))
     return torch.real(torch.matmul(eikx, coeffs) / size)
 
-def fourier_interp_2d(fxy, points, x_period=1.0, y_period=1.0):
+def fourier_interp2d(fxy, points, x_period=1.0, y_period=1.0):
     """Fourier interpolation for 2D periodic functions.
     
     Args:

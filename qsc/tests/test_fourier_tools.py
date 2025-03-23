@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
-from qsc.fourier_tools import fourier_interp, fourier_interp_2d, fourier_differentiation
+from qsc.fourier_tools import fourier_interp1d, fourier_interp2d, fourier_differentiation
     
 def test_fourier_interp():
     """ 1D fourier interpolation """
@@ -12,10 +12,10 @@ def test_fourier_interp():
     x = torch.tensor(np.linspace(0, period, n, endpoint=False))
     fx = torch.sin(4*x/5) + torch.cos(x/5)  # periodic function
     y = torch.linspace(0, period, 500)
-    fy = fourier_interp(fx, y, period=period)
+    fy = fourier_interp1d(fx, y, period=period)
 
     # interpolation error
-    err = torch.max(torch.abs(fx - fourier_interp(fx, x, period=period)))
+    err = torch.max(torch.abs(fx - fourier_interp1d(fx, x, period=period)))
     print('1D interpolation error', err)
     assert err < 1e-14, "1D interpolation failed"
 
@@ -54,7 +54,7 @@ def test_fourier_interp2d():
     points = torch.column_stack((X_fine.flatten(), Y_fine.flatten()))
 
     # Interpolate
-    fxy_interp = fourier_interp_2d(fxy, points, x_period=period, y_period=period)
+    fxy_interp = fourier_interp2d(fxy, points, x_period=period, y_period=period)
     fxy_interp = fxy_interp.reshape(X_fine.shape)
 
     # Calculate true values for comparison
