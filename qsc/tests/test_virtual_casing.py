@@ -10,42 +10,21 @@ def test_B_external_on_axis():
     """
     Test the accuracy of the surface computation
     """
-    # # set up the expansion
-    # stel = Qsc.from_paper("precise QA", nphi=2001, order='r2')
-
-    # minor_radius = 0.1
-    # ntheta = 256
-    # n_target = 32
-    # idx_target = range(0, stel.nphi, n_target)
-    # X_target = stel.XYZ0[:,idx_target].T
-
-    # # # TODO: remove
-    # # X_target = [X_target[-1]]
-    # # Bext = stel.Bfield_cartesian()[:,idx_target][:,-1:] # (3, nphi)
-
-    # # single evaluation
-    # with torch.no_grad():
-    #     # Bext_vc = stel.B_external_on_axis(r=minor_radius, ntheta=ntheta, X_target = X_target) # (3, nphi)
-    #     Bext_vc = stel.B_external_on_axis_taylor(r=minor_radius, ntheta=ntheta, X_target = X_target) # (3, nphi)
-    # Bext = stel.Bfield_cartesian()[:,idx_target] # (3, nphi)
-
-    # err = Bext - Bext_vc
-    # # print(err)
-    # print(torch.max(torch.abs(err)))
 
     """ plot error against minor radius"""
     mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
     ntheta = 256
+    nphi = 4001
     n_target = 32
     # storage 
     errs = []
     for mr in mr_list:
-        stel = Qsc.from_paper("precise QA", nphi=2001, order='r2')
+        stel = Qsc.from_paper("precise QA", nphi=61, order='r2')
         idx_target = range(0, stel.nphi, n_target)
         X_target = stel.XYZ0[:,idx_target].T
         with torch.no_grad():
-            # Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, X_target = X_target) # (3, nphi)
-            Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, X_target = X_target) # (3, nphi)
+            Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+            # Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
         Bext = stel.Bfield_cartesian()[:,idx_target] # (3, nphi)
         err = Bext - Bext_vc
         errs.append(torch.max(torch.abs(err)).detach().numpy())
@@ -69,28 +48,29 @@ def test_grad_B_external_on_axis():
     Test the accuracy of the surface computation
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", nphi=511, order='r1')
+    stel = Qsc.from_paper("precise QA", nphi=32, order='r1')
 
     minor_radius = 0.2
     ntheta = 256
+    nphi = 2001
     idx_target = range(0, stel.nphi, 64)
     X_target = stel.XYZ0[:,idx_target].T
 
     # single evaluation
     with torch.no_grad():
-        grad_Bext_vc = stel.grad_B_external_on_axis(r=minor_radius, ntheta=ntheta, X_target = X_target) # (3, nphi)
+        grad_Bext_vc = stel.grad_B_external_on_axis(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
     grad_Bext_vc = grad_Bext_vc.detach().numpy()
 
     # compute the derivative with finite difference
     def fd_obj(X, ii):
         X = torch.tensor(X).reshape((1,-1))
         with torch.no_grad():
-            Bext_vc = stel.B_external_on_axis(r=minor_radius, ntheta=ntheta, X_target = X) # (3, nphi)
+            Bext_vc = stel.B_external_on_axis(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X) # (3, nphi)
         return Bext_vc.detach().numpy()
     
     grad_Bext_fd = np.zeros(np.shape(grad_Bext_vc))
     for ii, x in enumerate(X_target.detach().numpy()):
-        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-3, ii=ii)[0]
+        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-4, ii=ii)[0]
 
     err = grad_Bext_vc - grad_Bext_fd
     print(np.max(np.abs(err)))
@@ -99,8 +79,8 @@ def test_grad_B_external_on_axis():
 
 def test_n_cross_B():
     # set up the expansion
-    stel1 = Qsc.from_paper("precise QA", nphi=511, order='r1')
-    stel2 = Qsc.from_paper("precise QA", nphi=511, order='r1')
+    stel1 = Qsc.from_paper("precise QA", nphi=511, order='r2')
+    stel2 = Qsc.from_paper("precise QA", nphi=511, order='r2')
 
     r_list = torch.linspace(0.01, 1, 10)
     ntheta = 64
@@ -138,6 +118,6 @@ def test_n_cross_B():
 
 
 if __name__ == "__main__":
-    # test_B_external_on_axis()
+    test_B_external_on_axis()
     test_n_cross_B()
-    # test_grad_B_external_on_axis()
+    test_grad_B_external_on_axis()

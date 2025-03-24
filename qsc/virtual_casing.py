@@ -8,6 +8,7 @@ import logging
 import numpy as np
 import torch
 from .util import rotate_nfp
+from .fourier_tools import fourier_interp2d_regular_grid
 
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,12 +53,15 @@ def B_taylor(self, r, ntheta=64):
 
     return B_surf
 
-def B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
+def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
 
     Args:
         r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants. 
         X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
             of radius r at which to evaluate B_external. The points do not necessarily need
             to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
@@ -75,40 +79,41 @@ def B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
         I += r**2 * self.I2
         G += r**2 * self.G2
 
-    g = self.surface(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    gtheta = self.dsurface_by_dtheta(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    gphi = self.dsurface_by_dvarphi(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+    # components of integrand
+    dvarphi_by_dphi = self.d_varphi_d_phi
+    dr_by_dvarphi = self.dsurface_by_dvarphi(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    dr_by_dtheta = self.dsurface_by_dtheta(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    d = (I * dr_by_dvarphi - G * dr_by_dtheta) * dvarphi_by_dphi.reshape((-1,1,1))
+    g = self.surface(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
 
     # get surface and tangents across all nfp
-    dr_by_dtheta = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    dr_by_dvarphi = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    diff = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     for ii in range(self.nfp):
         g = rotate_nfp(g, ii, self.nfp)
-        gtheta = rotate_nfp(gtheta, ii, self.nfp)
-        gphi = rotate_nfp(gphi, ii, self.nfp)
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        dr_by_dtheta[ii * self.nphi : (ii+1) * self.nphi] = gtheta
-        dr_by_dvarphi[ii * self.nphi : (ii+1) * self.nphi] = gphi
+        d = rotate_nfp(d, ii, self.nfp)
+        diff[ii * self.nphi : (ii+1) * self.nphi] = d
+
+    # interpolate
+    diff_interp = fourier_interp2d_regular_grid(diff, nphi, ntheta) # (nphi, ntheta, 3)
+    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
 
     dtheta = 2 * torch.pi / ntheta
-    dphi = torch.diff(self.phi)[0]
-    dvarphi_by_dphi = self.d_varphi_d_phi
-    dvarphi_by_dphi = torch.concatenate([dvarphi_by_dphi for ii in range(self.nfp)]).flatten().reshape((-1,1,1))
+    dphi = 2 * torch.pi / nphi
 
     def B_ext_of_phi(ii):
         """ Compute B_external by integrating over the entire device. """
 
         # biot-savart kernel
-        rprime = X_target[ii] - gamma_surf # (nphi, ntheta, 3)
+        rprime = X_target[ii] - gamma_surf_interp # (nphi, ntheta, 3)
         norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
         kernel = rprime / norm_rprime_cubed
 
         # cross product
-        diff = I * dr_by_dvarphi - G * dr_by_dtheta
-        integrand = torch.linalg.cross(kernel, diff, dim=-1) # (nphi, ntheta, 3)
+        integrand = torch.linalg.cross(kernel, diff_interp, dim=-1) # (nphi, ntheta, 3)
 
-        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dvarphi_by_dphi *  dtheta * dphi, dim=(0,1)) # (3,)
+        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
 
         return integral
     
@@ -116,12 +121,15 @@ def B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
 
     return B_ext
 
-def B_external_on_axis_taylor(self, r=0.1, ntheta=128, X_target=[]):
+def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
 
     Args:
         r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants.
         X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
             of radius r at which to evaluate B_external. The points do not necessarily need
             to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
@@ -131,6 +139,7 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=128, X_target=[]):
     """
     if len(X_target) == 0:
         X_target = self.XYZ0.T # (nphi, 3)
+    n_target = len(X_target)
 
     I = 0.0
     G = self.G0
@@ -138,61 +147,50 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=128, X_target=[]):
         I += r**2 * self.I2
         G += r**2 * self.G2
 
-    n = self.surface_normal(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    g = self.surface(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    b = self.B_taylor(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+    # components of integrand
+    dvarphi_by_dphi = self.d_varphi_d_phi
+    n = self.surface_normal(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    g = self.surface(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    b = self.B_taylor(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    nb = torch.linalg.cross(n, b) * dvarphi_by_dphi.reshape((-1,1,1))
 
-    # get the surface and normal across all nfp
-    normal = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    B = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    # map out full torus
+    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     for ii in range(self.nfp):
-        n = rotate_nfp(n, ii, self.nfp)
         g = rotate_nfp(g, ii, self.nfp)
-        b = rotate_nfp(b, ii, self.nfp)
-        normal[ii * self.nphi : (ii+1) * self.nphi] = n
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        B[ii * self.nphi : (ii+1) * self.nphi] = b
+        nb = rotate_nfp(nb, ii, self.nfp)
+        n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
+
+    # interpolate
+    n_cross_B_interp = fourier_interp2d_regular_grid(n_cross_B, nphi, ntheta) # (nphi, ntheta, 3)
+    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
 
     dtheta = 2 * torch.pi / ntheta
-    dphi = torch.diff(self.phi)[0]
-    dvarphi_by_dphi = self.d_varphi_d_phi
-    dvarphi_by_dphi = torch.concatenate([dvarphi_by_dphi for ii in range(self.nfp)]).flatten().reshape((-1,1,1))
+    dphi = 2 * torch.pi / nphi
 
-    # return B_ext
-    dA = torch.sum(normal**2, dim=-1, keepdims=True)
+    def B_ext_of_phi(ii):
+        """ Compute B_external by integrating over the entire device. """
 
-    # TODO: check the direction of the normal
-    # use outward facing unit normal
-    nhat = normal / dA
-
-    B_ext = torch.zeros(len(X_target), 3)
-    
-    for ii, xx in enumerate(X_target):
-
-        """Compute B_external(phi) by integrating over surface."""
-
-        rprime = xx - gamma_surf # (nphi, ntheta, 3)
-
-        # a = x - y / |x - y|^3 (y is surface point)
+        # biot-savart kernel
+        rprime = X_target[ii] - gamma_surf_interp # (nphi, ntheta, 3)
         norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
         kernel = rprime / norm_rprime_cubed
 
-        n_cross_B = torch.linalg.cross(nhat, B, dim=-1) # (nphi, ntheta, 3)
-        k_cross_n_cross_B = torch.linalg.cross(kernel, n_cross_B, dim=-1) # (nphi, ntheta, 3)
-        
-        # # dot product term
-        # n_dot_B = torch.sum(nhat * B, dim=-1, keepdims=True) # (nphi, ntheta, 1)
-        # k_n_dot_B = kernel * n_dot_B  # (nphi, ntheta, 3)
+        # cross product
+        integrand = torch.linalg.cross(kernel, n_cross_B_interp, dim=-1) # (nphi, ntheta, 3)
 
-        integrand = k_cross_n_cross_B
-        # integrate
-        B_ext[ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dA * dvarphi_by_dphi * dtheta * dphi, dim=(0,1)) # (3,)
+        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dtheta * dphi, dim=(0,1)) # (3,)
 
-    return B_ext.T
+        return integral
+    
+    B_ext = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
+
+    return B_ext
 
 
-def grad_B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
+def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle.
 
     This function calculates the gradient of the external magnetic field by evaluating
@@ -208,7 +206,10 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
 
     Args:
         r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants.
         X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
             of radius r at which to evaluate B_external. The points do not necessarily need
             to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
@@ -227,44 +228,42 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=128, X_target=[]):
         I += r**2 * self.I2
         G += r**2 * self.G2
 
-    g = self.surface(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    gtheta = self.dsurface_by_dtheta(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    gphi = self.dsurface_by_dvarphi(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+    # components of integrand
+    dvarphi_by_dphi = self.d_varphi_d_phi
+    dr_by_dvarphi = self.dsurface_by_dvarphi(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    dr_by_dtheta = self.dsurface_by_dtheta(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    d = (I * dr_by_dvarphi - G * dr_by_dtheta) * dvarphi_by_dphi.reshape((-1,1,1))
+    g = self.surface(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
 
     # get surface and tangents across all nfp
-    dr_by_dtheta = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    dr_by_dvarphi = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    diff = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     for ii in range(self.nfp):
         g = rotate_nfp(g, ii, self.nfp)
-        gtheta = rotate_nfp(gtheta, ii, self.nfp)
-        gphi = rotate_nfp(gphi, ii, self.nfp)
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        dr_by_dtheta[ii * self.nphi : (ii+1) * self.nphi] = gtheta
-        dr_by_dvarphi[ii * self.nphi : (ii+1) * self.nphi] = gphi
+        d = rotate_nfp(d, ii, self.nfp)
+        diff[ii * self.nphi : (ii+1) * self.nphi] = d
+
+    # interpolate
+    diff_interp = fourier_interp2d_regular_grid(diff, nphi, ntheta) # (nphi, ntheta, 3)
+    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
 
     dtheta = 2 * torch.pi / ntheta
-    dphi = torch.diff(self.phi)[0]
-    dvarphi_by_dphi = self.d_varphi_d_phi
-    dvarphi_by_dphi = torch.concatenate([dvarphi_by_dphi for ii in range(self.nfp)]).flatten().reshape((-1,1,1))
-
+    dphi = 2 * torch.pi / nphi
     eye = torch.eye(3)
     def B_ext_of_phi(ii, jj):
         """ Compute B_external by integrating over the entire device. """
 
         # biot-savart kernel
-        rprime = X_target[ii] - gamma_surf # (nphi, ntheta, 3)
+        rprime = X_target[ii] - gamma_surf_interp # (nphi, ntheta, 3)
         norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
         norm_rprime_fifth = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**5) # (nphi, ntheta, 1)
-        # print((eye[jj].reshape((1,1,-1))/norm_rprime_cubed).shape)
-        # print((rprime[:,:,jj][:,:,None]).shape)
         dkernel_by_djj = eye[jj].reshape((1,1,-1))/norm_rprime_cubed - 3 * rprime * rprime[:,:,jj][:,:,None] / norm_rprime_fifth
 
         # cross product
-        diff = I * dr_by_dvarphi - G * dr_by_dtheta
-        integrand = torch.linalg.cross(dkernel_by_djj, diff, dim=-1) # (nphi, ntheta, 3)
+        integrand = torch.linalg.cross(dkernel_by_djj, diff_interp, dim=-1) # (nphi, ntheta, 3)
 
-        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dvarphi_by_dphi *  dtheta * dphi, dim=(0,1)) # (3,)
+        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
 
         return integral
     
