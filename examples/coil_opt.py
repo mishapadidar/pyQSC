@@ -15,9 +15,6 @@ from qsc.simsopt_objectives import (QscOptimizable, FieldError, ExternalFieldErr
                                     IotaPenalty, AxisLengthPenalty, GradExternalFieldError,
                                     LGradB, B20Penalty, MagneticWellPenalty)
 
-# TODO: remove
-# torch.autograd.set_detect_anomaly(True)
-
 # configuration parameters
 ncoils = 4
 nfp = 2
@@ -34,9 +31,10 @@ etabar = 1.0
 axis_nphi = 31
 
 # B_external computation
-minor_radius = 0.3
-ntheta = 256
-ntarget = 8
+minor_radius = 0.1
+ntheta_vc = 256
+nphi_vc = 1024
+ntarget = axis_nphi
 
 # constraints
 iota_target = 0.103 # target iota
@@ -47,7 +45,7 @@ coil_curvature_target = 2 * 2 * np.pi / coil_length_target
 well_target = -50
 
 # optimization parameters
-max_iter = 100
+max_iter = 30
 mu_penalty = 1.0
 
 """ initialization """
@@ -81,19 +79,18 @@ for ii in range(1, axis_n_fourier_modes):
     stel.unfix(f'rc({ii})')
     stel.unfix(f'zs({ii})')
 
-# # plot the coils and axis
-# xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
-# print(xyz0.shape)
-# ax = plt.figure().add_subplot(projection='3d')
-# ax.plot(xyz0[0], xyz0[1], xyz0[2])
-# sms_plot(coils, engine="matplotlib", ax=ax, close=True, show=False)
-# plt.show()
+# plot the coils and axis
+xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
+ax = plt.figure().add_subplot(projection='3d')
+ax.plot(xyz0[0], xyz0[1], xyz0[2])
+sms_plot(coils, engine="matplotlib", ax=ax, close=True, show=False)
+plt.show()
 
 """ set up the optimization problem """
 
 # field matching objectives
-fe = ExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta, ntarget=ntarget)
-ge = GradExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta, ntarget=ntarget)
+fe = ExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta_vc, nphi=nphi_vc, ntarget=ntarget)
+ge = GradExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta_vc, nphi=nphi_vc, ntarget=ntarget)
 
 # quasi-symmetry
 b20_penalty = B20Penalty(stel)
@@ -108,8 +105,8 @@ well_penalty = MagneticWellPenalty(stel, well_target=well_target)
 
 # form an Optimizable objective
 constraint_violation = (iota_penalty + sum(coil_lengths_penalties) + axis_length_penalty + sum(coil_curvature_penalties))
-optional_penalties = lgradb_penalty + well_penalty + lgradb_penalty
-prob = fe + mu_penalty * constraint_violation + b20_penalty + mu_penalty * optional_penalties 
+optional_penalties = lgradb_penalty + well_penalty
+prob = fe + ge + mu_penalty * constraint_violation #+ mu_penalty * b20_penalty + mu_penalty * optional_penalties 
 def fun(dofs):
     prob.x = dofs
     return prob.J(), prob.dJ()
