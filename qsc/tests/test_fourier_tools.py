@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
-from qsc.fourier_tools import fourier_interp1d, fourier_interp2d, fourier_differentiation
+from qsc.fourier_tools import (fourier_interp1d, fourier_interp2d,
+                               fourier_differentiation, fourier_interp1d_regular_grid)
     
 def test_fourier_interp():
     """ 1D fourier interpolation """
@@ -16,6 +17,50 @@ def test_fourier_interp():
 
     # interpolation error
     err = torch.max(torch.abs(fx - fourier_interp1d(fx, x, period=period)))
+    print('1D interpolation error', err)
+    assert err < 1e-14, "1D interpolation failed"
+
+    plt.plot(x, fx.detach().numpy(), 'o', label='Sample Points')
+    plt.plot(y, fy.detach().numpy(), '-', label='Interpolated')
+    plt.legend()
+    plt.show()
+
+def test_fourier_interp1d_regular_grid():
+    """ 1D fourier interpolation """
+
+    # Example usage
+    n = 30
+    period = 2*torch.pi*5
+    x = torch.tensor(np.linspace(0, period, n, endpoint=False))
+    fx = torch.sin(4*x/5) + torch.cos(x/5)  # periodic function
+    m = 500
+    y = torch.linspace(0, period, m)
+    fy = fourier_interp1d_regular_grid(fx, m)
+
+    # interpolation error
+    err = torch.max(torch.abs(fx - fourier_interp1d_regular_grid(fx, n)))
+    print('1D interpolation error', err)
+    assert err < 1e-14, "1D interpolation failed"
+
+    plt.plot(x, fx.detach().numpy(), 'o', label='Sample Points')
+    plt.plot(y, fy.detach().numpy(), '-', label='Interpolated')
+    plt.legend()
+    plt.show()
+
+    # test a multi-output function
+    n = 30
+    period = 2*torch.pi*5
+    x = torch.tensor(np.linspace(0, period, n, endpoint=False))
+    fx1 = torch.sin(4*x/5) + torch.cos(x/5)  # periodic function
+    fx2 = torch.sin(2*x/5) + 0.1*torch.cos(x/5)  # periodic function
+    fx = torch.stack((fx1, fx2)).T
+
+    m = 500
+    y = torch.linspace(0, period, m)
+    fy = fourier_interp1d_regular_grid(fx, m)
+
+    # interpolation error
+    err = torch.max(torch.abs(fx - fourier_interp1d_regular_grid(fx, n)))
     print('1D interpolation error', err)
     assert err < 1e-14, "1D interpolation failed"
 
@@ -125,4 +170,5 @@ def test_fourier_differentiation():
 if __name__ == "__main__":
     test_fourier_interp()
     test_fourier_interp2d()
+    test_fourier_interp1d_regular_grid()
     test_fourier_differentiation()
