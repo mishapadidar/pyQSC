@@ -80,7 +80,7 @@ def fourier_interp2d(fxy, points, x_period=1.0, y_period=1.0):
     Args:
         fxy (array): 2D array of uniformly spaced evaluations of f(x,y) on the respective
             periods. Evaluations should be spaced using 
-                X, Y = torch.meshgrid(x, y, indexing='xy')
+                X, Y = torch.meshgrid(x, y, indexing='ij')
                 fxy = f(X, Y)
         points (array): Array of shape (N, 2) points (x,y) at which to evaluate the interpolant.
         x_period (float): period in x-direction.
@@ -107,10 +107,52 @@ def fourier_interp2d(fxy, points, x_period=1.0, y_period=1.0):
     for ii, xx in enumerate(points):
         eikx = torch.exp(2.0j * torch.pi * (kx * xx[0]))
         eiky = torch.exp(2.0j * torch.pi * (ky * xx[1]))
-        res = torch.matmul(torch.matmul(coeffs, eikx), eiky)
+        res = torch.matmul(torch.matmul(coeffs, eiky), eikx)
         result[ii] = (res / size).real
     
     return (result).real
+
+def fourier_interp2d_regular_grid(fxy, m_x, m_y):
+    """
+    Interpolate a 2D periodic function onto a uniform grid.
+    
+    Args:
+        fxy (array): (n_x, n_y) or (n_x, n_y, d) array of function evaluations.
+        Evaluations should be spaced using 
+                X, Y = torch.meshgrid(x, y, indexing='ij')
+                fxy = f(X, Y)
+        m_x (int): Number of points in x dimension
+        m_y (int): Number of points in y dimension
+    
+    Returns:
+        interpolated_signal: (m_x, m_y, d) array of interpolated values
+    """
+    ndim = fxy.ndim
+    if ndim == 2:
+        fxy = fxy[:,:,None]
+
+    N, M, d = fxy.shape
+
+    fxy_interp = torch.zeros((m_x, m_y, d))
+    for ii in range(d):
+        F = fft2(fxy[:,:,ii])
+
+        G = torch.zeros((m_x, m_y), dtype=complex)
+        G[:int(N/2),:int(M/2)] = F[:int(N/2),:int(M/2)]
+        G[:int(N/2),-int(M/2):] = F[:int(N/2),-int(M/2):]
+        G[-int(N/2):,:int(M/2)] = F[-int(N/2):,:int(M/2)]
+        G[-int(N/2):,-int(M/2):] = F[-int(N/2):,-int(M/2):]
+
+        # I am ignoring the normalization factor by using fft2 to actually
+        # compute ifft2
+        B = torch.real(torch.conj(fft2(torch.conj(G))))/(N*M)
+
+        fxy_interp[:,:,ii] = B
+
+    if ndim == 2:
+        fxy_interp = fxy_interp.squeeze(-1)
+    
+    return fxy_interp
 
 def fourier_differentiation(fx, period=2*torch.pi):
     """ Differentiate a periodic function using Fourier (spectral) differentiation.
