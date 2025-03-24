@@ -30,14 +30,15 @@ def Bfield_axis_mse(self, B_target):
 
 def grad_B_tensor_cartesian_mse(self, gradB_target):
     '''
-    Integrated mean-squared error between the Cartesian magnetic field on axis
+    Integrated mean-squared error between the gradient of the Cartesian magnetic field on axis
     and a target magnetic field over the magnetic axis,
-            Loss = (1/2) int |B - B_target|**2 dl
+            Loss = (1/2) int |gradB - gradB_target|**2 dl
 
     Args:
-        B_target: (3, nphi) tensor of target magnetic field values.
-        r: the near-axis radius
-        theta: the Boozer poloidal angle vartheta (= theta-N*phi)
+        gradB_target (tensor): (3, 3, nphi) tensor of target the gradient field values.
+
+    Return:
+        loss (tensor): float tensor of the objective value.
     '''
     gradB = self.grad_B_tensor_cartesian() # (3, 3, nphi)
     dphi = np.diff(self.phi)[0]

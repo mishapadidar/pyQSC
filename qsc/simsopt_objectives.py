@@ -88,8 +88,6 @@ class FieldError(Optimizable):
 
         # coil field
         xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
-
-        xyz = np.ascontiguousarray(xyz)
         self.bs.set_points(xyz)
         B_coil = self.bs.B() # (nphi, 3)
 
@@ -142,6 +140,121 @@ class FieldError(Optimizable):
         """
         return self.dfield_error()
     
+class GradFieldError(Optimizable):
+    def __init__(self, bs, qsc):
+        """Integrated mean-squared error between the gradient of the near axis field
+        and the gradient of the Biot Savart magnetic field over the magnetic axis,
+            Loss = (1/2) int |gradB - gradB_bs|**2 dl
+
+        Args:
+            bs (BiotSavart): Simsopt BiotSavart object.
+            qsc (Qsc): Qsc object.
+        """
+        self.bs = bs
+        self.qsc = qsc
+        Optimizable.__init__(self, depends_on=[bs, qsc])
+
+    def field_error(self):
+        """
+        Sum-of-squares error in the field:
+            Loss = (1/2) int |gradB - gradB_bs|**2 dl/phi dphi
+        where the integral is taken along the axis.
+        """
+        self.qsc.calculate_or_cache()
+        # evaluate coil field
+        xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
+        self.bs.set_points(xyz)
+        gradB_coil = self.bs.dB_by_dX().T # (3, 3, nphi)
+        # compute loss
+        loss = self.qsc.grad_B_tensor_cartesian_mse(torch.tensor(gradB_coil))
+        return loss
+
+    def dfield_error(self):
+        """
+        Derivative of the field error w.r.t all coil coeffs,
+            axis coefs, and etabar.
+
+        Returns:
+            SIMSOPT Derivative object: containing the derivatives of the .field_error function 
+            with respect to the BiotSavart and Qsc DOFs.
+        """
+        self.qsc.calculate_or_cache()
+        # Qsc field
+        # X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
+        # grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
+                                                    #   X_target = X_target.T)
+        # grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
+        grad_B_qsc = self.qsc.grad_B_tensor_cartesian().detach().numpy().T # (ntarget, 3, 3)
+
+        # coil field
+        # X_target_np = X_target.detach().numpy().T # (ntarget, 3)
+        # X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
+        xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
+        self.bs.set_points(xyz)
+        # self.bs.set_points(X_target_np)
+        grad_B_coil = self.bs.dB_by_dX() # (ntarget, 3, 3)
+
+        # compute dl
+        dphi = np.diff(self.qsc.phi)[0]
+        d_l_d_phi = self.qsc.d_l_d_phi
+        dl = (d_l_d_phi * dphi).detach().numpy().reshape((-1,1,1)) # (nphi, 1)
+
+        # compute dl
+        # dphi = np.diff(self.qsc.phi)[0]
+        # dphi = (2 * np.pi / self.qsc.nfp) / self.ntarget
+        # dl = d_l_d_phi.detach().numpy().reshape((-1,1,1)) * dphi
+
+        # derivative with respect to biot savart dofs
+        v = np.ones(3)
+        vterm = (grad_B_coil - grad_B_qsc)*dl
+        _, dJ_by_dbs = self.bs.B_and_dB_vjp(v, vterm) # Derivative object
+        
+        """ Derivative w.r.t. axis coeffs """
+        # this part of the derivative treats B_coil as a constant, independent of the axis
+        loss = self.field_error()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # derivative of gradB_coil(xyz(axis_coeffs)) term
+        d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
+        term21 = np.einsum("ilj,ijkl->ik", (grad_B_coil - grad_B_qsc) * dl, d2B_by_dXdX_bs) # (ntarget, 3)
+        dofs = self.qsc.get_dofs(as_tuple=True)
+        X_target = self.qsc.XYZ0
+        term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
+
+        derivs_axis = np.zeros(0)
+        for ii, x in enumerate(dofs):
+            # sum the two parts of the derivative
+            dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
+
+            if term2[ii] is not None:
+                dJ_by_dx += term2[ii].detach().numpy()
+            
+            derivs_axis = np.append(derivs_axis, dJ_by_dx)
+
+        # make a derivative object
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+
+        dJ = dJ_by_daxis + dJ_by_dbs
+
+        return dJ
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.field_error().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dfield_error()
+
 class ExternalFieldError(Optimizable):
     def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, ntarget=32):
         """Integrated mean-squared error between the Cartesian external magnetic field on axis
