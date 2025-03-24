@@ -14,7 +14,7 @@ def test_B_external_on_axis():
     """ plot error against minor radius"""
     mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
     ntheta = 256
-    nphi = 4001
+    nphi = 4096
     n_target = 32
     # storage 
     errs = []
@@ -43,7 +43,43 @@ def test_B_external_on_axis():
     plt.tight_layout()
     plt.show()
 
-def test_grad_B_external_on_axis():
+def test_grad_B_external_on_axis_accuracy():
+    """
+    Test the accuracy of the surface computation
+    """
+
+    """ plot error against minor radius"""
+    mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
+    ntheta = 256
+    nphi = 8192
+    n_target = 32
+    # storage 
+    errs = []
+    for mr in mr_list:
+        stel = Qsc.from_paper("precise QA", nphi=31, order='r2')
+        X_target = stel.XYZ0.T
+        with torch.no_grad():
+            Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+            # Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+        Bext = stel.grad_B_tensor_cartesian() # (3, nphi)
+        err = Bext - Bext_vc
+        errs.append(torch.max(torch.abs(err)).detach().numpy())
+    plt.plot(mr_list, errs, lw=3, marker='o', label='error')
+
+    # plot a quadratic e(r) = a*r^2
+    a = errs[-1] / (mr_list[-1] **2)
+    x = np.linspace(mr_list[0], mr_list[-1], 30)
+    y = a * x**2
+    plt.plot(x, y, lw=3, linestyle='--', color='k', label='r^2 reference')
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xlabel('minor radius', fontsize=14)
+    plt.ylabel('virtual casing error', fontsize=14)
+    plt.legend(loc='upper left')
+    plt.tight_layout()
+    plt.show()
+
+def test_grad_B_external_on_axis_consistency():
     """
     Test the accuracy of the surface computation
     """
@@ -52,7 +88,7 @@ def test_grad_B_external_on_axis():
 
     minor_radius = 0.2
     ntheta = 256
-    nphi = 2001
+    nphi = 2048
     idx_target = range(0, stel.nphi, 64)
     X_target = stel.XYZ0[:,idx_target].T
 
@@ -120,4 +156,5 @@ def test_n_cross_B():
 if __name__ == "__main__":
     test_B_external_on_axis()
     test_n_cross_B()
-    test_grad_B_external_on_axis()
+    test_grad_B_external_on_axis_accuracy()
+    test_grad_B_external_on_axis_consistency()
