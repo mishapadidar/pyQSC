@@ -100,84 +100,44 @@ def test_grad_B_external_on_axis():
 def test_n_cross_B():
     # set up the expansion
     stel1 = Qsc.from_paper("precise QA", nphi=511, order='r1')
-    stel2 = Qsc.from_paper("precise QA", nphi=511, order='r2')
+    stel2 = Qsc.from_paper("precise QA", nphi=511, order='r1')
 
-    r = 0.08
+    r_list = torch.linspace(0.01, 1, 10)
     ntheta = 64
 
-    # compute n x B using Taylor B
-    B_taylor = stel2.B_taylor(r=r, ntheta=ntheta)
-    n = stel2.surface_normal(r=r, ntheta=ntheta)
-    n_cross_B = torch.linalg.cross(n, B_taylor)
+    error_array = np.zeros(len(r_list))
+    for ii, r in enumerate(r_list):
+        # compute n x B using Taylor B
+        B_taylor = stel2.B_taylor(r=r, ntheta=ntheta)
+        n = stel2.surface_normal(r=r, ntheta=ntheta)
+        n_cross_B = torch.linalg.cross(n, B_taylor)
 
-    # compute n x B using Boozer approach
-    I = 0.0
-    G = stel1.G0
-    if stel1.order != 'r1':
-        I += r**2 * stel1.I2
-        G += r**2 * stel1.G2
-    dr_by_dtheta = stel1.dsurface_by_dtheta(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    dr_by_dvarphi = stel1.dsurface_by_dvarphi(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
-    n_cross_B_boozer = I * dr_by_dvarphi - G * dr_by_dtheta
+        # compute n x B using Boozer approach
+        I = 0.0
+        G = stel1.G0
+        if stel1.order != 'r1':
+            I += r**2 * stel1.I2
+            G += r**2 * stel1.G2
+        dr_by_dtheta = stel1.dsurface_by_dtheta(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+        dr_by_dvarphi = stel1.dsurface_by_dvarphi(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+        n_cross_B_boozer = I * dr_by_dvarphi - G * dr_by_dtheta
 
-    err = n_cross_B - n_cross_B_boozer
-    print(torch.max(torch.abs(err)))
-
-# def test_curl_B_taylor():
-#     """ 
-#     curl(B) = i(dyB3 - dzB2) - j(dxB3 - dzB1) + k(dxB2 - dyB1)
-#     --------
-#     jac(B) = dB/dr * grad(r) + dB/dtheta * grad(theta) + dB/dphi*grad(phi)
-#     where * means outer product
-#     """
-#     stel = Qsc.from_paper("precise QA", nphi=511, order='r1')
-
-#     r = 0.1
-#     ntheta = 64
-#     ds_by_dr = stel.dsurface_by_dr(r,ntheta)
-#     ds_by_dtheta = stel.dsurface_by_dtheta(r,ntheta)
-#     ds_by_dvarphi = stel.dsurface_by_dvarphi(r,ntheta)
-
-#     # TODO: check the cross is done right and the formula
-#     sqrtg = ds_by_dr * torch.linalg.cross(ds_by_dtheta, ds_by_dvarphi)
-#     grad_r = torch.linalg.cross(ds_by_dtheta, ds_by_dvarphi) / sqrtg
-#     grad_theta = torch.linalg.cross(ds_by_dvarphi, ds_by_dr) / sqrtg
-#     grad_varphi = torch.linalg.cross(ds_by_dr, ds_by_dtheta) / sqrtg
-
-#     # TODO: analyticaly compute dB/dr, dB/dtheta
-#     dr = 1e-4
-#     Brph = stel.B_taylor(r+dr, ntheta)
-#     Brmh = stel.B_taylor(r-dr, ntheta)
-#     dB_by_dr = (Brph - Brmh) / (2 * dr) # (nphi, ntheta, 3)
-#     B = stel.B_taylor(r, ntheta) # (nphi, ntheta, 3)
-#     dtheta = 2 * np.pi / ntheta
-#     dB_by_dtheta = (B[:, 2:, :] - B[:, :-2, :]) / (2 * dtheta) # (nphi, ntheta - 2, 3)
-#     dB_by_dphi = (B[2:,:,:] - B[:-2,:,:]) / (2 * stel.dphi) # (nphi-2, ntheta, 3)
-#     dB_by_dvarphi = dB_by_dphi / stel.d_varphi_d_phi.reshape((-1, 1, 1)) # (nphi-2, ntheta, 3)
-
-#     # trim arrays to same size
-#     dB_by_dr = dB_by_dr[1:-1, 1:-1, :] # (nphi-2, ntheta-2, 3)
-#     dB_by_dtheta = dB_by_dtheta[1:-1,:,:] # (nphi-2, ntheta-2, 3)
-#     dB_by_dvarphi = dB_by_dvarphi[:,1:-1,:] # (nphi-2, ntheta-2, 3)
-#     grad_r = grad_r[1:-1, 1:-1, :] # (nphi-2, ntheta-2, 3)
-#     grad_theta = grad_theta[1:-1, 1:-1, :] # (nphi-2, ntheta-2, 3)
-#     grad_varphi = grad_varphi[1:-1, 1:-1, :] # (nphi-2, ntheta-2, 3)
-
-#     # TODO: check the outer product is done right
-#     # compile jac(B)
-#     jacB = (torch.outer(dB_by_dr, grad_r) +
-#             torch.outer(dB_by_dtheta, grad_theta) +
-#             torch.outer(dB_by_dvarphi, grad_varphi)
-#             ) # (nphi, ntheta, nB, nx)
-
-#     # compute curl
-#     curl_B = torch.zero((stel.nphi, ntheta, 3))
-#     curl_B[:,:,0] = jacB[:,:,2,1] - jacB[:,:,1,2]
-#     curl_B[:,:,1] = - (jacB[:,:,2,0] - jacB[:,:,0,2])
-#     curl_B[:,:,2] = jacB[:,:,1,0] - jacB[:,:,0,1]
+        error_array[ii] = torch.max(torch.abs(n_cross_B - n_cross_B_boozer)).detach().numpy()
+    
+    plt.plot(r_list, error_array, lw=2, label='data')
+    c = error_array[0]/r_list[0]**3
+    plt.plot(r_list, c*r_list**3, '--', color='k', lw=2, label='r^3')
+    c = error_array[0]/r_list[0]**2
+    plt.plot(r_list, c*r_list**2, '--', color='grey', lw=2, label='r^2')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.legend(loc='upper left')
+    plt.ylabel('error in $n x B$')
+    plt.xlabel('$r$')
+    plt.show()
 
 
 if __name__ == "__main__":
     # test_B_external_on_axis()
-    # test_n_cross_B()
-    test_grad_B_external_on_axis()
+    test_n_cross_B()
+    # test_grad_B_external_on_axis()
