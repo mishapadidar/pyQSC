@@ -143,15 +143,29 @@ class FieldError(Optimizable):
         return self.dfield_error()
     
 class ExternalFieldError(Optimizable):
-    def __init__(self, bs, qsc, r, ntheta=128, ntarget=32):
-        """
-        bs: biotsavart object
-        qsc: an Optimizable Qsc object
+    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, ntarget=32):
+        """Integrated mean-squared error between the Cartesian external magnetic field on axis
+        and a target magnetic field over the magnetic axis,
+                Loss = (1/2) int |B - B_target|**2 dl
+        B is computed by the virtual casing integral by integrating over a surface of
+        radius r. This class is a Simsopt Optimizable object.
+
+        Args:
+            bs (BiotSavart): Simsopt BiotSavart object.
+            qsc (Qsc): Qsc object
+            r (float): minor radius.
+            ntheta (int, optional): Number of theta quadrature points for virtual casing integral.
+                Defaults to 256.
+            nphi (int, optional): Number of phi quadrature points for virtual casing integral.
+                Defaults to 1024.
+            ntarget (int, optional): Number of uniformly spaced points on the magnetic axis at
+                which to evaluate objective. Defaults to 32.
         """
         self.bs = bs
         self.qsc = qsc
         self.r = r
         self.ntheta = ntheta
+        self.nphi = nphi
         self.ntarget = ntarget
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
@@ -163,15 +177,16 @@ class ExternalFieldError(Optimizable):
         """
         self.qsc.calculate_or_cache()
         # evaluate coil field
-        X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, nphi)
-        X_target_np = X_target.detach().numpy().T # (nphi, 3)
-        X_target_np = np.ascontiguousarray(X_target_np) # (nphi, 3)
+        X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget)
+        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
+        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
 
         self.bs.set_points(X_target_np)
-        B_coil = self.bs.B().T # (3, nphi)
+        B_coil = self.bs.B().T # (3, ntarget)
         
         # compute loss
-        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta)
+        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta,
+                                               nphi = self.nphi)
         return loss
 
     def dfield_error(self):
@@ -186,7 +201,7 @@ class ExternalFieldError(Optimizable):
         self.qsc.calculate_or_cache()
         # Qsc field
         X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
-        B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, X_target = X_target.T).T.detach().numpy() # (ntarget, 3)
+        B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi, X_target = X_target.T).T.detach().numpy() # (ntarget, 3)
 
         # coil field
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -247,7 +262,7 @@ class ExternalFieldError(Optimizable):
         return self.dfield_error()
 
 class GradExternalFieldError(Optimizable):
-    def __init__(self, bs, qsc, r, ntheta=128, ntarget=32):
+    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, ntarget=32):
         """        Integrated mean-squared error between the gradient of the external magnetic field on axis
         and the gradient of the Biot Savart field over the magnetic axis,
                 Loss = (1/2) int |grad_B_external - grad_B_bs|**2 dl
@@ -255,17 +270,21 @@ class GradExternalFieldError(Optimizable):
         radius r.
 
         Args:
-            bs (BiotSavart object): Biot Savart object.
-            qsc (Optimizable, Qsc): Optimizable Qsc object for computing external field.
-            r (float): minor radius of the flux surface on which to take the virtual casing integral.
-            ntheta (int, optional): number of theta quadrature points. Defaults to 128.
-            ntarget (int, optional): number of target points on the magnetic axis at which to discretize
-                the objective function integral. Defaults to 32.
+            bs (BiotSavart): Simsopt BiotSavart object.
+            qsc (Qsc): Qsc object
+            r (float): minor radius.
+            ntheta (int, optional): Number of theta quadrature points for virtual casing integral.
+                Defaults to 256.
+            nphi (int, optional): Number of phi quadrature points for virtual casing integral.
+                Defaults to 1024.
+            ntarget (int, optional): Number of uniformly spaced points on the magnetic axis at
+                which to evaluate objective. Defaults to 32.
         """
         self.bs = bs
         self.qsc = qsc
         self.r = r
         self.ntheta = ntheta
+        self.nphi = nphi
         self.ntarget = ntarget
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
@@ -285,7 +304,8 @@ class GradExternalFieldError(Optimizable):
         grad_B_coil = self.bs.dB_by_dX().T # (3, 3, ntarget)
 
         # compute loss
-        loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r, ntheta=self.ntheta)
+        loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r,
+                                                    ntheta=self.ntheta, nphi=self.nphi)
         return loss
 
     def dfield_error(self):
@@ -300,7 +320,8 @@ class GradExternalFieldError(Optimizable):
         self.qsc.calculate_or_cache()
         # Qsc field
         X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
-        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, X_target = X_target.T)
+        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
+                                                      X_target = X_target.T)
         grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
 
         # coil field

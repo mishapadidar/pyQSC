@@ -54,8 +54,9 @@ def downsample_axis(self, nphi):
         nphi (int): number of quadrature points
 
     Returns:
-        (tensor): (3, nphi) tensor of points along in the axis.
-        (tensor): (nphi,) tensor of derivatives of the arclength at the quadrature points.
+        (tensor): (3, nphi) tensor of points on the magnetic axis.
+        (tensor): (nphi,) tensor of derivatives of the arclength at the quadrature points with
+            respect to the cylindrical angle on axis, dl/dphi.
     """
     phi = torch.tensor(np.linspace(0, 2 * torch.pi / self.nfp, nphi, endpoint=False))
     R0 = torch.zeros(nphi)
@@ -76,7 +77,7 @@ def downsample_axis(self, nphi):
     d_l_d_phi = torch.sqrt(R0 * R0 + R0p * R0p + Z0p * Z0p)
     return xyz, d_l_d_phi
 
-def B_external_on_axis_mse(self, B_target, r, ntheta=128):
+def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
     '''
     Integrated mean-squared error between the Cartesian external magnetic field on axis
     and a target magnetic field over the magnetic axis,
@@ -87,19 +88,20 @@ def B_external_on_axis_mse(self, B_target, r, ntheta=128):
     Args:
         B_target (tensor): (3, ntarget) tensor of target magnetic field values.
         r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        ntheta (int, optional): number of theta quadrature points for virtual casing integral. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points for virtual casing integral. Defaults to 1024.
     Returns:
         (tensor): (1,) Loss value as a scalar tensor.
     '''
     ntarget = B_target.shape[1]
     X_target, d_l_d_phi = self.downsample_axis(ntarget)
-    Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, X_target = X_target.T) # (3, nphi)
+    Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi, X_target = X_target.T) # (3, ntarget)
     dphi = (2 * torch.pi / self.nfp) / ntarget
-    dl = d_l_d_phi * dphi # (nphi,)
+    dl = d_l_d_phi * dphi # (ntarget,)
     loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
     return loss
 
-def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=128):
+def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=256, nphi=1024):
     '''
     Integrated mean-squared error between the gradient of the Cartesian external magnetic field on axis
     and a target gradient field over the magnetic axis,
@@ -110,15 +112,16 @@ def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=128):
     Args:
         grad_B_target (tensor): (3, 3, ntarget) tensor of target magnetic field values.
         r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        ntheta (int, optional): number of theta quadrature points for virtual casing integral. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points for virtual casing integral. Defaults to 1024.
     Returns:
         (tensor): (1,) Loss value as a scalar tensor.
     '''
     ntarget = grad_B_target.shape[-1]
     X_target, d_l_d_phi = self.downsample_axis(ntarget)
-    grad_Bext = self.grad_B_external_on_axis(r=r, ntheta=ntheta, X_target = X_target.T) # (3, 3, nphi)
+    grad_Bext = self.grad_B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi, X_target = X_target.T) # (3, 3, ntarget)
     dphi = (2 * torch.pi / self.nfp) / ntarget
-    dl = d_l_d_phi * dphi # (nphi,)
+    dl = d_l_d_phi * dphi # (ntarget,)
     loss = 0.5 * torch.sum(torch.sum((grad_Bext - grad_B_target)**2, dim=(0,1)) * dl) # scalar tensor
     return loss
 
