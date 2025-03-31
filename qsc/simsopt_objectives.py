@@ -33,13 +33,6 @@ class QscOptimizable(Qsc, Optimizable):
         self.need_to_run_code = True
         return super().recompute_bell(parent)
 
-    def calculate_or_cache(self):
-        """Run the calculate() method, only if need_to_run_code is True.
-        """
-        if self.need_to_run_code:
-            self.calculate()
-            self.need_to_run_code = False
-
 
 class FieldError(Optimizable):
     def __init__(self, bs, qsc):
@@ -57,7 +50,6 @@ class FieldError(Optimizable):
             (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi
         where the integral is taken along the axis.
         """
-        self.qsc.calculate_or_cache()
         # evaluate coil field
         xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
         xyz = np.ascontiguousarray(xyz)
@@ -77,7 +69,6 @@ class FieldError(Optimizable):
             of the .J function with respect to the BiotSavart
             and Expansion DOFs.
         """
-        self.qsc.calculate_or_cache()
         # Qsc field
         B_qsc = self.qsc.Bfield_cartesian().T.detach().numpy() # (nphi, 3)
 
@@ -160,7 +151,6 @@ class GradFieldError(Optimizable):
             Loss = (1/2) int |gradB - gradB_bs|**2 dl/phi dphi
         where the integral is taken along the axis.
         """
-        self.qsc.calculate_or_cache()
         # evaluate coil field
         xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
         self.bs.set_points(xyz)
@@ -178,7 +168,6 @@ class GradFieldError(Optimizable):
             SIMSOPT Derivative object: containing the derivatives of the .field_error function 
             with respect to the BiotSavart and Qsc DOFs.
         """
-        self.qsc.calculate_or_cache()
         # Qsc field
         # X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
         # grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
@@ -288,7 +277,6 @@ class ExternalFieldError(Optimizable):
             (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi
         where the integral is taken along the axis.
         """
-        self.qsc.calculate_or_cache()
         # evaluate coil field
         X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -311,7 +299,6 @@ class ExternalFieldError(Optimizable):
             of the .J function with respect to the BiotSavart
             and Expansion DOFs.
         """
-        self.qsc.calculate_or_cache()
         # Qsc field
         X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
         B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi, X_target = X_target.T).T.detach().numpy() # (ntarget, 3)
@@ -407,7 +394,6 @@ class GradExternalFieldError(Optimizable):
         Returns:
             tensor: float tensor with the objective value.
         """
-        self.qsc.calculate_or_cache()
         # evaluate coil field
         X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -430,7 +416,6 @@ class GradExternalFieldError(Optimizable):
             SIMSOPT Derivative object: containing the derivatives of the .field_error function 
             with respect to the BiotSavart and Qsc DOFs.
         """
-        self.qsc.calculate_or_cache()
         # Qsc field
         X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
         grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
@@ -520,7 +505,6 @@ class IotaPenalty(Optimizable):
         Returns:
             tensor: float tensor with objective function value.
         """
-        self.qsc.calculate_or_cache()
         loss = 0.5 * ((self.qsc.iota - self.iota_target) / self.iota_target)**2
         return loss
     
@@ -530,7 +514,6 @@ class IotaPenalty(Optimizable):
         Returns:
             Derivative: Simsopt Derivative object.
         """
-        self.qsc.calculate_or_cache()
         loss = self.penalty()
         dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
@@ -579,7 +562,6 @@ class AxisLengthPenalty(Optimizable):
         Returns:
             tensor: float tensor with objective function value.
         """
-        self.qsc.calculate_or_cache()
         loss = 0.5 * ((self.qsc.axis_length - self.target_length) / self.target_length)**2
         return loss
     
@@ -589,7 +571,6 @@ class AxisLengthPenalty(Optimizable):
         Returns:
             Derivative: Simsopt Derivative object.
         """
-        self.qsc.calculate_or_cache()
         loss = self.penalty()
         dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
@@ -651,7 +632,6 @@ class LGradB(Optimizable):
         Returns:
             tensor: float tensor of the objective value.
         """
-        self.qsc.calculate_or_cache()
         grad_B = self.qsc.grad_B_tensor_cartesian() # (3, 3, nphi)
 
         # compute dl
@@ -670,7 +650,6 @@ class LGradB(Optimizable):
         Returns:
             Derivative: Simsopt Derivative object.
         """
-        self.qsc.calculate_or_cache()
 
         # compute derivative
         loss = self.obj()
@@ -740,7 +719,6 @@ class B20Penalty(Optimizable):
         Returns:
             tensor: float tensor of the objective value.
         """
-        self.qsc.calculate_or_cache()
         B20 = self.qsc.B20
 
         # compute dl
@@ -763,7 +741,6 @@ class B20Penalty(Optimizable):
         Returns:
             Derivative: Simsopt Derivative object.
         """
-        self.qsc.calculate_or_cache()
 
         # compute derivative
         loss = self.obj()
@@ -833,7 +810,6 @@ class MagneticWellPenalty(Optimizable):
         Returns:
             tensor: float tensor of the objective value.
         """
-        self.qsc.calculate_or_cache()
         d2_volume_d_psi2 = self.qsc.d2_volume_d_psi2
         zero = torch.tensor(0)
         J = torch.max(zero, d2_volume_d_psi2 - self.well_target)**2 / (self.well_target**2)
@@ -845,7 +821,6 @@ class MagneticWellPenalty(Optimizable):
         Returns:
             Derivative: Simsopt Derivative object.
         """
-        self.qsc.calculate_or_cache()
 
         # compute derivative
         loss = self.obj()
