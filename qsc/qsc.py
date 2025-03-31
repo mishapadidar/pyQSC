@@ -151,6 +151,11 @@ class Qsc(torch.nn.Module):
             self.calculate_r2()
             if self.order == 'r3':
                 self.calculate_r3()
+
+        # clear the cached values
+        self.build_virtual_casing_interpolants.cache_clear()
+        self.B_external_on_axis_nodes.cache_clear()
+        self.grad_B_external_on_axis_nodes.cache_clear()
     
     def get_dofs(self, as_tuple=False):
         """

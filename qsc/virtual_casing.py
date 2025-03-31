@@ -6,6 +6,7 @@ Methods for computing the virtual casing integral.
 
 import logging
 import numpy as np
+from functools import lru_cache
 import torch
 from .util import rotate_nfp
 from .fourier_tools import fourier_interp2d_regular_grid
@@ -121,6 +122,7 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32
 
     return B_ext
 
+@lru_cache(maxsize=32)
 def B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
     """Compute B_external on the magnetic axis using the virtual casing principle at
     the quadrature points on the magnetic axis.
@@ -188,6 +190,7 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_tar
 
     return B_ext
 
+@lru_cache(maxsize=32)
 def grad_B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle at
     the quadrature points on the magnetic axis.
@@ -269,6 +272,7 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, 
     B_ext = B_ext.reshape((3, 3, -1))
     return B_ext
 
+@lru_cache(maxsize=32)
 def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32):
     """Interpolate the surface current n x B and the surface coordinates on the flux surface.
 
