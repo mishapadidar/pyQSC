@@ -259,7 +259,7 @@ def test_ExternalFieldError():
     def fun(x):
         stel.x = x
         return fe.field_error().detach().numpy()
-    dfe_by_dqsc_fd = finite_difference(fun, x, 1e-6)
+    dfe_by_dqsc_fd = finite_difference(fun, x, 1e-7)
     err = np.max(np.abs(dfe_by_dqsc_fd - dfe_by_dqsc))
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"

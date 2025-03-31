@@ -114,8 +114,8 @@ def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
         (tensor): (1,) Loss value as a scalar tensor.
     '''
     ntarget = B_target.shape[1]
-    X_target, d_l_d_phi = self.downsample_axis(ntarget)
-    Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi, X_target = X_target.T) # (3, ntarget)
+    d_l_d_phi = self.subsample_axis_nodes(ntarget)[1] # (ntarget,)
+    Bext_vc = self.B_external_on_axis_nodes(r=r, ntheta=ntheta, nphi=nphi, ntarget=ntarget) # (3, ntarget)
     dphi = (2 * torch.pi / self.nfp) / ntarget
     dl = d_l_d_phi * dphi # (ntarget,)
     loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
@@ -138,8 +138,8 @@ def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=256, nphi=1024):
         (tensor): (1,) Loss value as a scalar tensor.
     '''
     ntarget = grad_B_target.shape[-1]
-    X_target, d_l_d_phi = self.downsample_axis(ntarget)
-    grad_Bext = self.grad_B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi, X_target = X_target.T) # (3, 3, ntarget)
+    d_l_d_phi = self.subsample_axis_nodes(ntarget)[1] # (ntarget,)
+    grad_Bext = self.grad_B_external_on_axis_nodes(r=r, ntheta=ntheta, nphi=nphi, ntarget=ntarget) # (3, 3, ntarget)
     dphi = (2 * torch.pi / self.nfp) / ntarget
     dl = d_l_d_phi * dphi # (ntarget,)
     loss = 0.5 * torch.sum(torch.sum((grad_Bext - grad_B_target)**2, dim=(0,1)) * dl) # scalar tensor

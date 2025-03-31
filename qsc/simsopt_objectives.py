@@ -260,8 +260,10 @@ class ExternalFieldError(Optimizable):
                 Defaults to 256.
             nphi (int, optional): Number of phi quadrature points for virtual casing integral.
                 Defaults to 1024.
-            ntarget (int, optional): Number of uniformly spaced points on the magnetic axis at
-                which to evaluate objective. Defaults to 32.
+            ntarget (int, optional): Number of points on the magnetic axis at
+                which to evaluate objective. Must be less than or equal to the number of points on axis.
+                For spectral convergence choose ntarget to be a divisor of the number of points on the axis.
+                Defaults to 32.
         """
         self.bs = bs
         self.qsc = qsc
@@ -276,9 +278,12 @@ class ExternalFieldError(Optimizable):
         Sum-of-squares error in the virtual-casing field:
             (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi
         where the integral is taken along the axis.
+
+        Returns:
+            tensor: float tensor with the objective value.
         """
         # evaluate coil field
-        X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget)
+        X_target, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
         X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
 
@@ -286,8 +291,8 @@ class ExternalFieldError(Optimizable):
         B_coil = self.bs.B().T # (3, ntarget)
         
         # compute loss
-        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta,
-                                               nphi = self.nphi)
+        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
+
         return loss
 
     def dfield_error(self):
@@ -300,8 +305,8 @@ class ExternalFieldError(Optimizable):
             and Expansion DOFs.
         """
         # Qsc field
-        X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
-        B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi, X_target = X_target.T).T.detach().numpy() # (ntarget, 3)
+        X_target, d_l_d_phi = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
+        B_qsc = self.qsc.B_external_on_axis_nodes(r=self.r, ntheta=self.ntheta, nphi=self.nphi, ntarget=self.ntarget).T.detach().numpy() # (ntarget, 3)
 
         # coil field
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -377,8 +382,10 @@ class GradExternalFieldError(Optimizable):
                 Defaults to 256.
             nphi (int, optional): Number of phi quadrature points for virtual casing integral.
                 Defaults to 1024.
-            ntarget (int, optional): Number of uniformly spaced points on the magnetic axis at
-                which to evaluate objective. Defaults to 32.
+            ntarget (int, optional): Number of points on the magnetic axis at
+                which to evaluate objective. Must be less than or equal to the number of points on axis.
+                For spectral convergence choose ntarget to be a divisor of the number of points on the axis.
+                Defaults to 32.
         """
         self.bs = bs
         self.qsc = qsc
@@ -395,7 +402,7 @@ class GradExternalFieldError(Optimizable):
             tensor: float tensor with the objective value.
         """
         # evaluate coil field
-        X_target, _ = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget)
+        X_target, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
         X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
 
@@ -417,9 +424,9 @@ class GradExternalFieldError(Optimizable):
             with respect to the BiotSavart and Qsc DOFs.
         """
         # Qsc field
-        X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
-        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
-                                                      X_target = X_target.T)
+        X_target, d_l_d_phi = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
+        grad_B_qsc = self.qsc.grad_B_external_on_axis_nodes(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
+                                                      ntarget=self.ntarget)
         grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
 
         # coil field
