@@ -271,7 +271,17 @@ class ExternalFieldError(Optimizable):
         self.ntheta = ntheta
         self.nphi = nphi
         self.ntarget = ntarget
+        self.need_to_run_code = True
         Optimizable.__init__(self, depends_on=[bs, qsc])
+
+    def recompute_bell(self, parent=None):
+        """
+        This function will get called any time any of the DOFs of the
+        parent class change.
+        need_to_run_code signifies the need to reevaluate the field_error method.
+        """
+        self.need_to_run_code = True
+        return super().recompute_bell(parent)
 
     def field_error(self):
         """
@@ -282,6 +292,9 @@ class ExternalFieldError(Optimizable):
         Returns:
             tensor: float tensor with the objective value.
         """
+        if not self.need_to_run_code:
+            return self.loss
+        
         # evaluate coil field
         X_target, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -292,7 +305,8 @@ class ExternalFieldError(Optimizable):
         
         # compute loss
         loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
-
+        self.loss = loss
+        self.need_to_run_code = False
         return loss
 
     def dfield_error(self):
@@ -323,7 +337,7 @@ class ExternalFieldError(Optimizable):
 
         """ Derivative w.r.t. axis coeffs """
         # this part of the derivative treats B_coil as a constant, independent of the axis
-        loss = self.field_error()
+        loss = torch.clone(self.field_error())
         dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
         # derivative of B_coil(xyz(axis_coeffs)) term
@@ -393,7 +407,17 @@ class GradExternalFieldError(Optimizable):
         self.ntheta = ntheta
         self.nphi = nphi
         self.ntarget = ntarget
+        self.need_to_run_code = True
         Optimizable.__init__(self, depends_on=[bs, qsc])
+
+    def recompute_bell(self, parent=None):
+        """
+        This function will get called any time any of the DOFs of the
+        parent class change.
+        need_to_run_code signifies the need to reevaluate the field_error method.
+        """
+        self.need_to_run_code = True
+        return super().recompute_bell(parent)
 
     def field_error(self):
         """Compute the objective function.
@@ -401,6 +425,9 @@ class GradExternalFieldError(Optimizable):
         Returns:
             tensor: float tensor with the objective value.
         """
+        if not self.need_to_run_code:
+            return self.loss
+        
         # evaluate coil field
         X_target, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -412,6 +439,8 @@ class GradExternalFieldError(Optimizable):
         # compute loss
         loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r,
                                                     ntheta=self.ntheta, nphi=self.nphi)
+        self.loss = loss
+        self.need_to_run_code = False
         return loss
 
     def dfield_error(self):
@@ -447,7 +476,7 @@ class GradExternalFieldError(Optimizable):
         
         """ Derivative w.r.t. axis coeffs """
         # this part of the derivative treats B_coil as a constant, independent of the axis
-        loss = self.field_error()
+        loss = torch.clone(self.field_error())
         dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
         # derivative of B_coil(xyz(axis_coeffs)) term

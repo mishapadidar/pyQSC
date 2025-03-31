@@ -10,6 +10,8 @@ from functools import lru_cache
 import torch
 from .util import rotate_nfp
 from .fourier_tools import fourier_interp2d_regular_grid
+from torch.jit import script
+
 
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -162,7 +164,7 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_tar
         (tensor): (3, n) tensor of evaluations of B_external.
     """
     if len(X_target) == 0:
-        X_target = self.XYZ0.T # (nphi, 3)
+        X_target = self.XYZ0.T # (ntarget, 3)
     n_target = len(X_target)
 
     # get interpolated data
@@ -187,7 +189,6 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_tar
         return integral
     
     B_ext = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
-
     return B_ext
 
 @lru_cache(maxsize=32)
@@ -252,24 +253,24 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, 
     dtheta = 2 * torch.pi / ntheta
     dphi = 2 * torch.pi / nphi
     eye = torch.eye(3)
-    def B_ext_of_phi(ii, jj):
-        """ Compute B_external by integrating over the entire device. """
-
+    
+    B_ext = torch.zeros((3, 3, n_target))
+    for ii in range(n_target):
         # biot-savart kernel
         rprime = X_target[ii] - gamma_surf_interp # (nphi, ntheta, 3)
         norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
         norm_rprime_fifth = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**5) # (nphi, ntheta, 1)
-        dkernel_by_djj = eye[jj].reshape((1,1,-1))/norm_rprime_cubed - 3 * rprime * rprime[:,:,jj][:,:,None] / norm_rprime_fifth
+        second_term = 3 * rprime / norm_rprime_fifth
 
-        # cross product
-        integrand = torch.linalg.cross(dkernel_by_djj, surface_current, dim=-1) # (nphi, ntheta, 3)
+        for jj in range(3):
 
-        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
+            dkernel_by_djj = eye[jj].reshape((1,1,-1))/norm_rprime_cubed - rprime[:,:,jj][:,:,None] * second_term
 
-        return integral
-    
-    B_ext = torch.stack([B_ext_of_phi(ii, jj) for jj in range(3) for ii in range(n_target)]).T
-    B_ext = B_ext.reshape((3, 3, -1))
+            # cross product
+            integrand = torch.linalg.cross(dkernel_by_djj, surface_current, dim=-1) # (nphi, ntheta, 3)
+
+            B_ext[:, jj, ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
+
     return B_ext
 
 @lru_cache(maxsize=32)
