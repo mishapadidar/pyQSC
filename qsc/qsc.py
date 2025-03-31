@@ -39,10 +39,12 @@ class Qsc(torch.nn.Module):
     from .Frenet_to_cylindrical import Frenet_to_cylindrical, to_RZ
     from .to_vmec import to_vmec
     from .util import B_mag
-    from .virtual_casing import B_external_on_axis, B_taylor, B_external_on_axis_taylor, grad_B_external_on_axis, build_virtual_casing_interpolants
+    from .virtual_casing import (B_external_on_axis, B_taylor, B_external_on_axis_taylor,
+                                 grad_B_external_on_axis, build_virtual_casing_interpolants,
+                                 B_external_on_axis_nodes, grad_B_external_on_axis_nodes)
     from .configurations import from_paper, configurations
     from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, total_derivative,
-                             B_external_on_axis_mse, downsample_axis, grad_B_external_on_axis_mse)
+                             B_external_on_axis_mse, downsample_axis, subsample_axis_nodes, grad_B_external_on_axis_mse)
     
     def __init__(self, rc, zs, rs=[], zc=[], nfp=1, etabar=1., sigma0=0., B0=1.,
                  I2=0., sG=1, spsi=1, nphi=61, B2s=0., B2c=0., p2=0., order="r1"):

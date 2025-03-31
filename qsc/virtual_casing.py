@@ -121,6 +121,28 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32
 
     return B_ext
 
+def B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
+    """Compute B_external on the magnetic axis using the virtual casing principle at
+    the quadrature points on the magnetic axis.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants. 
+        ntarget (int, optional): number of target points to evaluate B_external on the magnetic axis.
+            If ntarget is 0, it will default to nphi points on the magnetic axis, 
+            uniformly spaced in the axis cylindrical phi.
+    Returns:
+        (tensor): (3, ntarget) tensor of evaluations of B_external.
+    """
+    if ntarget == 0:
+        ntarget = self.nphi
+    Xtarget = self.subsample_axis_nodes(ntarget)[0] # (3, ntarget)
+
+    return B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
+
 def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
 
@@ -165,6 +187,29 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_tar
     B_ext = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
 
     return B_ext
+
+def grad_B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
+    """Compute grad_B_external on the magnetic axis using the virtual casing principle at
+    the quadrature points on the magnetic axis.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants. 
+        ntarget (int, optional): number of target points to evaluate B_external on the magnetic axis.
+            If ntarget is 0, it will default to nphi points on the magnetic axis, 
+            uniformly spaced in the axis cylindrical phi.
+    Returns:
+        (tensor): (3, 3, ntarget) tensor of evaluations of B_external. 
+            The gradient is a symmetric matrix at each target point.
+    """
+    if ntarget == 0:
+        ntarget = self.nphi
+    Xtarget = self.subsample_axis_nodes(ntarget)[0] # (3, ntarget)
+
+    return grad_B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
 
 def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle.

@@ -78,6 +78,25 @@ def downsample_axis(self, nphi):
     d_l_d_phi = torch.sqrt(R0 * R0 + R0p * R0p + Z0p * Z0p)
     return xyz, d_l_d_phi
 
+def subsample_axis_nodes(self, ntarget):
+    """This convenience function computes the Cartesian axis coordinates and derivatives of the
+    arc length at a subset of the quadrature points on the magnetic axis.
+
+    Args:
+        ntarget (int): number of quadrature points between 1 and nphi.
+
+    Returns:
+        (tensor): (3, ntarget) tensor of points on the magnetic axis.
+        (tensor): (ntarget,) tensor of derivatives of the arclength at the quadrature points with
+            respect to the cylindrical angle on axis, dl/dphi.
+    """
+    # index of points on axis
+    idx = torch.tensor(np.linspace(0, self.nphi, ntarget, endpoint=False, dtype=int))
+    xyz = self.XYZ0[:, idx] # (3, nphi) tensor of points on the magnetic axis
+    d_l_d_phi = self.d_l_d_phi[idx] # (nphi,) tensor of derivatives of the arc length with respect to phi
+
+    return xyz, d_l_d_phi
+
 def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
     '''
     Integrated mean-squared error between the Cartesian external magnetic field on axis
