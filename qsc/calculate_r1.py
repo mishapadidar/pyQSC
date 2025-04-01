@@ -23,11 +23,18 @@ def _residual(self, x):
     sigma = torch.clone(x)
     sigma[0] = self.sigma0
     iota = x[0]
-    r = torch.matmul(self.d_d_varphi, sigma) \
-        + (iota + self.helicity * self.nfp) * \
-        (self.etabar_squared_over_curvature_squared * self.etabar_squared_over_curvature_squared + 1 + sigma * sigma) \
-        - 2 * self.etabar_squared_over_curvature_squared * (-self.spsi * self.torsion + self.I2 / self.B0) * self.G0 / self.B0
-    
+
+    if self.solve_vacuum:
+        r = torch.matmul(self.d_d_varphi, sigma) \
+            + (iota + self.helicity * self.nfp) * \
+            (self.etabar_squared_over_curvature_squared * self.etabar_squared_over_curvature_squared + 1 + sigma * sigma) \
+            - 2 * self.etabar_squared_over_curvature_squared * (-self.spsi * self.torsion) * self.G0 / self.B0
+    else:
+        r = torch.matmul(self.d_d_varphi, sigma) \
+            + (iota + self.helicity * self.nfp) * \
+            (self.etabar_squared_over_curvature_squared * self.etabar_squared_over_curvature_squared + 1 + sigma * sigma) \
+            - 2 * self.etabar_squared_over_curvature_squared * (-self.spsi * self.torsion + self.I2 / self.B0) * self.G0 / self.B0
+        
     #logger.debug("_residual called with x={}, r={}".format(x, r))
     return r
 
@@ -76,6 +83,23 @@ def solve_sigma_equation(self):
     self.sigma = torch.nn.Parameter(sigma, requires_grad=True)
     self.iota =  torch.nn.Parameter(iota, requires_grad=True)
     self.iotaN = self.iota + self.helicity * self.nfp
+
+    """ now solve the vacuum system"""
+    self.solve_vacuum = True
+    x0 = self.sigma0 * torch.ones(self.nphi)
+    x0[0] = 0 # Initial guess for iota
+    sol = newton(self._residual, x0, jac=self._jacobian) 
+
+    # detach so we DOFS dont differentiate through sigma/iota.
+    sigma_vac = torch.clone(sol).detach()
+    iota_vac = torch.clone(sol[0]).detach()
+    sigma_vac[0] = self.sigma0
+
+    # set sigma/iota to be variables we can differentiate through later
+    self.sigma_vac = torch.nn.Parameter(sigma_vac, requires_grad=True)
+    self.iota_vac =  torch.nn.Parameter(iota_vac, requires_grad=True)
+    self.iotaN_vac = self.iota_vac + self.helicity * self.nfp
+    self.solve_vacuum = False
 
 def dresidual_by_ddof_vjp(self, v):
     """
@@ -133,6 +157,39 @@ def dresidual_by_ddof_vjp(self, v):
     
     return dsigma_iota_vjp_by_ddofs
 
+def dresidual_vac_by_ddof_vjp(self, v):
+    """
+    Differentiate the solution of the ``vacuum`` sigma equation with respect to the degrees of
+    freedom. The method is the same as dresidual_by_ddof_vjp, but for the vacuum system.
+    
+    This function computes the directional derivative,
+        transpose(dz/dx) * v      
+    For our problem, z(x) is the function
+        z(x) = [iota(x), sigma_1(x), ..., sigma_nphi(x)],
+    and x are the problem DOFs.
+
+    Args:
+        v (tensor): tensor of length nphi (number of residuals)
+    
+    Return:
+        dsigma_by_ddofs (tuple): tuple of derivatives, one entry for each DOF. Each 
+    """
+    x = torch.clone(self.sigma_vac)
+    x[0] = self.iota_vac
+
+    # solve (1) for lambda (adjoint)
+    dr_by_dsigma_vac = self._jacobian(x)
+    _lambda = torch.linalg.solve(dr_by_dsigma_vac.T, - v)
+
+    # use autodiff to compute transpose(dr/dx) * lambda
+    self.solve_vacuum = True # ensure we use the vacuum system
+    r = self._residual(x)
+    dofs = self.get_dofs(as_tuple=True)
+    dsigma_iota_vjp_by_ddofs = torch.autograd.grad(r, dofs, grad_outputs=_lambda, retain_graph=True, allow_unused=True) # tuple
+    self.solve_vacuum = False 
+
+    return dsigma_iota_vjp_by_ddofs
+
 def _determine_helicity(self):
     """
     Determine the integer N associated with the type of quasisymmetry
@@ -175,6 +232,8 @@ def r1_diagnostics(self):
     """
     self.Y1s = self.sG * self.spsi * self.curvature / self.etabar
     self.Y1c = self.sG * self.spsi * self.curvature * self.sigma / self.etabar
+    self.Y1c_vac = self.sG * self.spsi * self.curvature * self.sigma_vac / self.etabar
+    self.Y1c_nonvac = self.Y1c - self.Y1c_vac
 
     # If helicity is nonzero, then the original X1s/X1c/Y1s/Y1c variables are defined with respect to a "poloidal" angle that
     # is actually helical, with the theta=0 curve wrapping around the magnetic axis as you follow phi around toroidally. Therefore
@@ -184,6 +243,7 @@ def r1_diagnostics(self):
         self.X1c_untwisted = self.X1c
         self.Y1s_untwisted = self.Y1s
         self.Y1c_untwisted = self.Y1c
+        self.Y1c_vac_untwisted = self.Y1c_vac
     else:
         angle = -self.helicity * self.nfp * self.varphi
         sinangle = torch.sin(angle)
@@ -192,6 +252,9 @@ def r1_diagnostics(self):
         self.X1c_untwisted = self.X1s * (-sinangle) + self.X1c * cosangle
         self.Y1s_untwisted = self.Y1s *   cosangle  + self.Y1c * sinangle
         self.Y1c_untwisted = self.Y1s * (-sinangle) + self.Y1c * cosangle
+        self.Y1c_vac_untwisted = self.Y1s * (-sinangle) + self.Y1c_vac * cosangle
+    
+    self.Y1c_nonvac_untwisted = self.Y1c_untwisted - self.Y1c_vac_untwisted
 
     # Use (R,Z) for elongation in the (R,Z) plane,
     # or use (X,Y) for elongation in the plane perpendicular to the magnetic axis.
@@ -200,12 +263,15 @@ def r1_diagnostics(self):
     self.elongation = (p + torch.sqrt(p * p - 4 * q * q)) / (2 * torch.abs(q))
     self.mean_elongation = torch.sum(self.elongation * self.d_l_d_phi) / torch.sum(self.d_l_d_phi)
     index = torch.argmax(self.elongation)
+    # TODO: torch through this
     self.max_elongation = -fourier_minimum(-self.elongation.detach().numpy())
 
     self.d_X1c_d_varphi = torch.matmul(self.d_d_varphi, self.X1c)
     self.d_X1s_d_varphi = torch.matmul(self.d_d_varphi, self.X1s)
     self.d_Y1s_d_varphi = torch.matmul(self.d_d_varphi, self.Y1s)
     self.d_Y1c_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c)
+    self.d_Y1c_vac_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c_vac)
+    self.d_Y1c_nonvac_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c_nonvac)
 
     self.calculate_grad_B_tensor()
 

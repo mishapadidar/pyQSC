@@ -30,6 +30,9 @@ def init_axis(self):
     nphi = self.nphi
     nfp = self.nfp
 
+    # dont solve the vacuum case unless we are in vacuum mode
+    self.solve_vacuum = False
+
     phi = torch.tensor(np.linspace(0, 2 * torch.pi / nfp, nphi, endpoint=False))
     d_phi = phi[1] - phi[0]
     R0 = torch.zeros(nphi)

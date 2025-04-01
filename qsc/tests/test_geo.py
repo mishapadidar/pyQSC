@@ -77,6 +77,26 @@ def test_surface_tangents():
     print(err)
     assert err < 1e-4, "dsurface_by_dvarphi incorrect"
 
+def test_surface_nonvac():
+    """
+    Test the accuracy of the nonvacuum surface computation
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", I2 = 10, order='r1')
+
+    minor_radius = 0.1
+    ntheta = 16
+    surface = stel.surface(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+    surface_nonvac = stel.surface_nonvac(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+    surface_vac = surface - surface_nonvac
+
+    # sanity check plot
+    ax = plt.figure().add_subplot(projection='3d')
+    ax.plot_wireframe(surface[:,:,0], surface[:,:,1], surface[:,:,2], alpha=0.2) # ours
+    ax.plot_wireframe(surface_nonvac[:,:,0], surface_nonvac[:,:,1], surface_nonvac[:,:,2], alpha=0.2) # ours
+    plt.show()
+
 if __name__ == "__main__":
     # test_surface()
-    test_surface_tangents()
+    # test_surface_tangents()
+    test_surface_nonvac()
