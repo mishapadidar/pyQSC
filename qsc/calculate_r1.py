@@ -274,4 +274,5 @@ def r1_diagnostics(self):
     self.d_Y1c_nonvac_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c_nonvac)
 
     self.calculate_grad_B_tensor()
+    self.calculate_grad_B_tensor_vac()
 

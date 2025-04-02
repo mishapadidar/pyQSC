@@ -4,6 +4,7 @@ import unittest
 import numpy as np
 import logging
 from qsc.qsc import Qsc
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,22 @@ class CylindricalCartesianTensorsTests(unittest.TestCase):
         np.testing.assert_almost_equal(dBdxdx_cartesian_transpose_3, dBdxdx_cartesian)
         np.testing.assert_almost_equal(dBdxdx_cartesian_transpose_4, dBdxdx_cartesian)
         np.testing.assert_almost_equal(dBdxdx_cartesian_transpose_5, dBdxdx_cartesian)
-                
+
+def test_calculate_grad_B_tensor_vac():
+    """Test the calculate_grad_B_tensor_vac method
+    """
+    stel = Qsc.from_paper("precise QA", I2 = 100, order='r1')
+    stel_vac = Qsc.from_paper("precise QA", I2 = 0.0, order='r1')
+
+    # in vacuum, total solution and vacuum components should match
+    assert torch.allclose(stel_vac.grad_B_tensor_cylindrical, stel_vac.grad_B_tensor_cylindrical_vac, atol=1e-14), "grad_B_tensor_cylindrical or grad_B_tensor_cylindrical incorect in vacuum"
+
+    # vacuum component of nonvac field should match the total vacuum solution
+    err = stel_vac.grad_B_tensor_cylindrical - stel.grad_B_tensor_cylindrical_vac
+    assert torch.allclose(stel.grad_B_tensor_cylindrical_vac, stel_vac.grad_B_tensor_cylindrical, atol=1e-14), "grad_B_tensor_cylindrical or grad_B_tensor_cylindrical_vac incorect"
+
+    print("PASSED: test_calculate_grad_B_tensor_vac")
+
 if __name__ == "__main__":
     unittest.main()
+    test_calculate_grad_B_tensor_vac()

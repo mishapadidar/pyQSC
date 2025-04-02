@@ -27,9 +27,10 @@ class Qsc(torch.nn.Module):
     from .init_axis import init_axis, convert_to_spline
     from .calculate_r1 import _residual, _jacobian, solve_sigma_equation, \
         _determine_helicity, r1_diagnostics, dresidual_by_ddof_vjp, dresidual_vac_by_ddof_vjp
-    from .grad_B_tensor import calculate_grad_B_tensor, calculate_grad_grad_B_tensor, \
-        Bfield_cylindrical, Bfield_cartesian, grad_B_tensor_cartesian, \
-        grad_grad_B_tensor_cylindrical, grad_grad_B_tensor_cartesian
+    from .grad_B_tensor import (calculate_grad_B_tensor, calculate_grad_grad_B_tensor,
+        Bfield_cylindrical, Bfield_cartesian, grad_B_tensor_cartesian,
+        grad_grad_B_tensor_cylindrical, grad_grad_B_tensor_cartesian,
+        calculate_grad_B_tensor_vac)
     from .calculate_r2 import calculate_r2
     from .calculate_r3 import calculate_r3, calculate_shear
     from .geo import (surface, dsurface_by_dvarphi, dsurface_by_dtheta,

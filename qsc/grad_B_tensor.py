@@ -73,6 +73,70 @@ def calculate_grad_B_tensor(self):
     self.inv_L_grad_B = 1.0 / self.L_grad_B
     self.min_L_grad_B = fourier_minimum(self.L_grad_B.detach().numpy())
     
+def calculate_grad_B_tensor_vac(self):
+    """
+    Compute the vacuum components of the gradB tensor. the gradB tensor
+    can be defined as
+          gradB = gradB_vac + gradB_nonvac
+    where gradB_vac is equal to gradB when p2,I2=0.
+
+    gradB is defacto independent of p2, and only depends on I2 through Y1c and iota.
+
+    self should be an instance of Qsc with X1c, Y1s etc populated.
+    """
+
+    s = self # Shorthand
+    tensor = Struct()
+    
+    factor = s.spsi * s.B0 / s.d_l_d_varphi
+    tensor.tn = s.sG * s.B0 * s.curvature
+    tensor.nt = tensor.tn
+    tensor.bb = factor * (s.X1c * s.d_Y1s_d_varphi - s.iotaN_vac * s.X1c * s.Y1c_vac)
+    tensor.nn = factor * (s.d_X1c_d_varphi * s.Y1s + s.iotaN_vac * s.X1c * s.Y1c_vac)
+    tensor.bn = factor * (-s.sG * s.spsi * s.d_l_d_varphi * s.torsion \
+                          - s.iotaN_vac * s.X1c * s.X1c)
+    tensor.nb = factor * (s.d_Y1c_vac_d_varphi * s.Y1s - s.d_Y1s_d_varphi * s.Y1c_vac \
+                          + s.sG * s.spsi * s.d_l_d_varphi * s.torsion \
+                          + s.iotaN_vac * (s.Y1s * s.Y1s + s.Y1c_vac * s.Y1c_vac))
+
+    if hasattr(s.B0, "__len__"): # if B0 is an array (in quasisymmetry B0 is a scalar)
+        tensor.tt = s.sG * torch.matmul(s.d_d_varphi, s.B0) / s.d_l_d_varphi
+    else:
+        tensor.tt = 0
+
+    self.grad_B_tensor_vac = tensor
+    
+    t = s.tangent_cylindrical.transpose(0,1)
+    n = s.normal_cylindrical.transpose(0,1)
+    b = s.binormal_cylindrical.transpose(0,1)
+
+    grad_B_tensor_cylindrical = torch.zeros(3,3,self.nphi)
+    for j in range(3):
+        for i in range(3):
+            grad_B_tensor_cylindrical[j,i,:] = (tensor.nn * n[i] * n[j] \
+                            + tensor.bn * b[i] * n[j] + tensor.nb * n[i] * b[j] \
+                            + tensor.bb * b[i] * b[j] \
+                            + tensor.tn * t[i] * n[j] + tensor.nt * n[i] * t[j] \
+                            + tensor.tt * t[i] * t[j])
+    self.grad_B_tensor_cylindrical_vac = grad_B_tensor_cylindrical
+    # self.grad_B_tensor_cylindrical = [[
+    #                           tensor.nn * n[i] * n[j] \
+    #                         + tensor.bn * b[i] * n[j] + tensor.nb * n[i] * b[j] \
+    #                         + tensor.bb * b[i] * b[j] \
+    #                         + tensor.tn * t[i] * n[j] + tensor.nt * n[i] * t[j] \
+    #                         + tensor.tt * t[i] * t[j]
+    #                     for i in range(3)] for j in range(3)]
+
+#     self.grad_B_colon_grad_B = tensor.tn * tensor.tn + tensor.nt * tensor.nt \
+#         + tensor.bb * tensor.bb + tensor.nn * tensor.nn \
+#         + tensor.nb * tensor.nb + tensor.bn * tensor.bn \
+#         + tensor.tt * tensor.tt
+
+#     self.L_grad_B = s.B0 * torch.sqrt(2 / self.grad_B_colon_grad_B_vac)
+#     self.inv_L_grad_B = 1.0 / self.L_grad_B
+#     self.min_L_grad_B = fourier_minimum(self.L_grad_B.detach().numpy())
+
+
 def calculate_grad_grad_B_tensor(self, two_ways=False):
     """
     Compute the components of the grad grad B tensor, and the scale
@@ -1289,18 +1353,26 @@ def Bfield_cartesian(self, r=0, theta=0):
 
     return B_vector_cartesian
 
-def grad_B_tensor_cartesian(self):
+def grad_B_tensor_cartesian(self, vacuum_component=False):
     '''
     Function to calculate the gradient of the magnetic field vector B=(B_x,B_y,B_z)
-    at every point along the axis (hence with nphi points) where x, y and z
-    are the standard cartesian coordinates.
+    at every point along the axis where x, y and z are the standard cartesian coordinates.
+
+    Args:
+        vacuum_component (bool): if True, the vacuum component of the gradient is calculated. Otherwise
+            the full gradient, including the nonvacuum component, is computed. Default False.
+    
+    Returns:
+        grad_B_vector_cartesian (tensor): (3, 3, nphi) tensor of the gradient
+        of the magnetic field vector.
     '''
 
-    B0, B1, B2 = self.Bfield_cylindrical()
-    nablaB = self.grad_B_tensor_cylindrical
+    if vacuum_component:
+        nablaB = self.grad_B_tensor_cylindrical_vac
+    else:
+        nablaB = self.grad_B_tensor_cylindrical
     cosphi = torch.cos(self.phi)
     sinphi = torch.sin(self.phi)
-    R0 = self.R0
 
     grad_B_vector_cartesian = torch.zeros((3,3,self.nphi))
     grad_B_vector_cartesian[0,0] = (cosphi**2*nablaB[0, 0] - cosphi*sinphi*(nablaB[0, 1] + nablaB[1, 0]) + 
