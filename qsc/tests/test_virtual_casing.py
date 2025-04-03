@@ -8,7 +8,7 @@ from qsc.util import finite_difference
 
 def test_B_external_on_axis():
     """
-    Test the accuracy of the surface computation
+    Test the accuracy of the B_external computation
     """
 
     """ plot error against minor radius"""
@@ -152,9 +152,31 @@ def test_n_cross_B():
     plt.xlabel('$r$')
     plt.show()
 
+def test_B_external_on_axis_split():
+    """
+    Test the accuracy of the B_external_on_axis_split computation
+    """
+
+    """ Check accuracy in vacuum """
+    mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
+    ntheta = 256
+    nphi = 4096
+    stel = Qsc.from_paper("precise QA", nphi=31, I2=0.0, p2=0.0, order='r1')
+    Bext = stel.Bfield_cartesian()# (3, nphi)
+
+    # storage 
+    errs = []
+    for mr in mr_list:
+        with torch.no_grad():
+            Bext_vc = stel.B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        err = Bext - Bext_vc
+        errs.append(torch.max(torch.abs(err)).detach().numpy())
+    
+    assert np.allclose(errs, 0.0), "B_external_on_axis_split incorrect in vacuum case"
 
 if __name__ == "__main__":
     test_B_external_on_axis()
     test_n_cross_B()
     test_grad_B_external_on_axis_accuracy()
     test_grad_B_external_on_axis_consistency()
+    test_B_external_on_axis_split()

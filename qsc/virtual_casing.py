@@ -16,13 +16,15 @@ from torch.jit import script
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def B_taylor(self, r, ntheta=64):
+def B_taylor(self, r, ntheta=64, vacuum_component=False):
     """Calculate the magnetic field on a flux surface of radius r using
     the Taylor expansion of B.
 
     Args:
         r (float): radius of flux surface
         ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        vacuum_component (bool, optional): If true, only compute the vacuum component of the
+            field. Defaults to False.
 
     Returns:
         B_surf: (nphi, ntheta, 3) array containing the magnetic field on the flux surface.
@@ -32,10 +34,10 @@ def B_taylor(self, r, ntheta=64):
     B0 = self.Bfield_cartesian() # (3, nphi)
 
     # [i, j, k]; i indexes Cartesian dofs; j indexes B; k indexes axis
-    gradB = self.grad_B_tensor_cartesian() # (3, 3, nphi)
+    gradB = self.grad_B_tensor_cartesian(vacuum_component=vacuum_component) # (3, 3, nphi)
     if self.order != 'r1':
         # [i, j, k, l]; k indexes B, (i,j) are Cartesian dofs; l indexes axis.
-        grad2B = self.grad_grad_B_tensor_cartesian() # (3, 3, 3, nphi)
+        grad2B = self.grad_grad_B_tensor_cartesian(vacuum_component=vacuum_component) # (3, 3, 3, nphi)
     nphi = self.nphi
 
     # compute flux surface
@@ -55,6 +57,7 @@ def B_taylor(self, r, ntheta=64):
             B_surf[ii] += 0.5 * torch.einsum('lj,kjl->lk', delta_r[ii], part) # (ntheta, 3)
 
     return B_surf
+
 
 def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
@@ -121,6 +124,91 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32
         return integral
     
     B_ext = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
+
+    return B_ext
+
+def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
+    """Compute B_external on the magnetic axis using the virtual casing principle. In this method
+    we use the splitting method to compute the virtual casing to higher accuracy.
+
+    The solution is expressed as
+        B_ext(r) = B_vac(r) + int k(r,r') x (n(r') x B_nonvac(r')) dtheta dphi
+    where k is the biot-savart kernel and n is the surface normal.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants.
+        X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
+            of radius r at which to evaluate B_external. The points do not necessarily need
+            to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
+            axis, uniformly spaced in the axis cylindrical phi.
+    Returns:
+        (tensor): (3, n) tensor of evaluations of B_external.
+    """
+
+    # TODO: we can only compute the solution at axis nodes!
+    if X_target != []:
+        raise ValueError("X_target must be []. @padidar needs to fix this.")
+    if len(X_target) == 0:
+        X_target = self.XYZ0.T # (nphi, 3)
+    n_target = len(X_target)
+
+    I = 0.0
+    G = self.G0
+    if self.order != 'r1':
+        I += r**2 * self.I2
+        G += r**2 * self.G2
+
+    # components of integrand
+    dvarphi_by_dphi = self.d_varphi_d_phi
+    n = self.surface_normal(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    g = self.surface(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    b = self.B_taylor(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    b_vac = self.B_taylor(r=r, ntheta=ntheta_eval, vacuum_component=True) # (nphi, ntheta, 3)
+    b_nonvac = b - b_vac # (nphi, ntheta, 3)
+    nb = torch.linalg.cross(n, b_nonvac) * dvarphi_by_dphi.reshape((-1,1,1))
+
+    # map out full torus
+    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    n_cross_B_nonvac = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    for ii in range(self.nfp):
+        g = rotate_nfp(g, ii, self.nfp)
+        gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
+        nb = rotate_nfp(nb, ii, self.nfp)
+        n_cross_B_nonvac[ii * self.nphi : (ii+1) * self.nphi] = nb
+
+    # interpolate
+    n_cross_B_interp = fourier_interp2d_regular_grid(n_cross_B_nonvac, nphi, ntheta) # (nphi, ntheta, 3)
+    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
+
+    dtheta = 2 * torch.pi / ntheta
+    dphi = 2 * torch.pi / nphi
+
+    def B_ext_of_phi(ii):
+        """ Compute B_external by integrating over the entire device. """
+
+        # biot-savart kernel
+        rprime = X_target[ii] - gamma_surf_interp # (nphi, ntheta, 3)
+        norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
+        kernel = rprime / norm_rprime_cubed
+
+        # cross product
+        integrand = torch.linalg.cross(kernel, n_cross_B_interp, dim=-1) # (nphi, ntheta, 3)
+
+        integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dtheta * dphi, dim=(0,1)) # (3,)
+
+        return integral
+    
+    # B_vac on axis
+    B_vac = self.Bfield_cartesian()
+
+    # nonvacuum component
+    B_ext_nonvac = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
+
+    B_ext = B_vac + B_ext_nonvac
 
     return B_ext
 
