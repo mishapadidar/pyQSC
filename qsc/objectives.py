@@ -89,13 +89,14 @@ def subsample_axis_nodes(self, ntarget):
         (tensor): (3, ntarget) tensor of points on the magnetic axis.
         (tensor): (ntarget,) tensor of derivatives of the arclength at the quadrature points with
             respect to the cylindrical angle on axis, dl/dphi.
+        (tensor): (ntarget,) tensor of integer indexes of the points on axis.
     """
     # index of points on axis
     idx = torch.tensor(np.linspace(0, self.nphi, ntarget, endpoint=False, dtype=int))
     xyz = self.XYZ0[:, idx] # (3, nphi) tensor of points on the magnetic axis
     d_l_d_phi = self.d_l_d_phi[idx] # (nphi,) tensor of derivatives of the arc length with respect to phi
 
-    return xyz, d_l_d_phi
+    return xyz, d_l_d_phi, idx
 
 def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
     '''

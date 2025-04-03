@@ -156,12 +156,12 @@ def test_B_external_on_axis_split():
     """
     Test the accuracy of the B_external_on_axis_split computation
     """
-
-    """ Check accuracy in vacuum """
     mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
     ntheta = 256
     nphi = 4096
-    stel = Qsc.from_paper("precise QA", nphi=31, I2=0.0, p2=0.0, order='r1')
+
+    """ Check accuracy in vacuum """
+    stel = Qsc.from_paper("precise QA", nphi=31, I2=0.0, p2=0.0, order='r2')
     Bext = stel.Bfield_cartesian()# (3, nphi)
 
     # storage 
@@ -172,7 +172,38 @@ def test_B_external_on_axis_split():
         err = Bext - Bext_vc
         errs.append(torch.max(torch.abs(err)).detach().numpy())
     
+    # should be zero error!
     assert np.allclose(errs, 0.0), "B_external_on_axis_split incorrect in vacuum case"
+
+    """ Error of original calculation vs minor radius in vacuum """
+
+    stel = Qsc.from_paper("precise QA", nphi=61, order='r2', p2 = 0.0, I2=0.0)
+    Bext = stel.Bfield_cartesian()# (3, nphi)
+    errs_taylor = []
+    errs_split = []
+    for mr in mr_list:
+        with torch.no_grad():
+            Bext_taylor = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+            Bext_split = stel.B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        err = Bext - Bext_taylor
+        errs_taylor.append(torch.max(torch.abs(err)).detach().numpy())
+        err = Bext - Bext_split
+        errs_split.append(torch.max(torch.abs(err)).detach().numpy())
+    
+    major_radius = float(stel.rc[0].detach().numpy().item())
+    aspect_ratio = major_radius / np.array(mr_list)
+    # taylor method errors
+    plt.plot(aspect_ratio, errs_taylor, lw=3, color='tab:blue', marker='o', label='Naive Method')
+    plt.plot(aspect_ratio, errs_split, lw=3, color='tab:orange', marker='o', label='Splitting Method')
+    plt.grid(color='grey', linewidth=1, alpha=0.7)
+    plt.yscale('symlog', linthresh=1e-5)
+    plt.xscale('log')
+    plt.xlabel('Aspect Ratio', fontsize=14)
+    plt.ylabel('$|B_{ext} - B_{ext}^{NAE}|_{\infty}$', fontsize=14)
+    plt.title("Approximation Accuracy of $B_{ext}$ in Vacuum")
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     test_B_external_on_axis()

@@ -296,7 +296,7 @@ class ExternalFieldError(Optimizable):
             return self.loss
         
         # evaluate coil field
-        X_target, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget)
+        X_target = self.qsc.subsample_axis_nodes(ntarget=self.ntarget)[0] # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
         X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
 
@@ -319,7 +319,7 @@ class ExternalFieldError(Optimizable):
             and Expansion DOFs.
         """
         # Qsc field
-        X_target, d_l_d_phi = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
+        X_target, d_l_d_phi, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
         B_qsc = self.qsc.B_external_on_axis_nodes(r=self.r, ntheta=self.ntheta, nphi=self.nphi, ntarget=self.ntarget).T.detach().numpy() # (ntarget, 3)
 
         # coil field
@@ -429,7 +429,7 @@ class GradExternalFieldError(Optimizable):
             return self.loss
         
         # evaluate coil field
-        X_target, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget)
+        X_target = self.qsc.subsample_axis_nodes(ntarget=self.ntarget)[0] # (3, ntarget)
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
         X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
 
@@ -453,7 +453,7 @@ class GradExternalFieldError(Optimizable):
             with respect to the BiotSavart and Qsc DOFs.
         """
         # Qsc field
-        X_target, d_l_d_phi = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
+        X_target, d_l_d_phi, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
         grad_B_qsc = self.qsc.grad_B_external_on_axis_nodes(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
                                                       ntarget=self.ntarget)
         grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)

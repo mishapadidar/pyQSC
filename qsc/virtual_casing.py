@@ -127,7 +127,7 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32
 
     return B_ext
 
-def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
+def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
     """Compute B_external on the magnetic axis using the virtual casing principle. In this method
     we use the splitting method to compute the virtual casing to higher accuracy.
 
@@ -149,18 +149,10 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
         (tensor): (3, n) tensor of evaluations of B_external.
     """
 
-    # TODO: we can only compute the solution at axis nodes!
-    if X_target != []:
-        raise ValueError("X_target must be []. @padidar needs to fix this.")
-    if len(X_target) == 0:
-        X_target = self.XYZ0.T # (nphi, 3)
-    n_target = len(X_target)
-
-    I = 0.0
-    G = self.G0
-    if self.order != 'r1':
-        I += r**2 * self.I2
-        G += r**2 * self.G2
+    if ntarget == 0:
+        ntarget = self.nphi
+    X_target, _, idx = self.subsample_axis_nodes(ntarget) # (3, ntarget), (ntarget,)
+    X_target = X_target.T
 
     # components of integrand
     dvarphi_by_dphi = self.d_varphi_d_phi
@@ -202,13 +194,13 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
 
         return integral
     
-    # B_vac on axis
-    B_vac = self.Bfield_cartesian()
+    # B_vac at axis nodes
+    B_vac = self.Bfield_cartesian()[:,idx] # (3, ntarget)
 
     # nonvacuum component
-    B_ext_nonvac = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
+    B_ext_nonvac = torch.stack([B_ext_of_phi(ii) for ii in range(ntarget)]).T # (3, ntarget)
 
-    B_ext = B_vac + B_ext_nonvac
+    B_ext = B_vac + B_ext_nonvac # (3, ntarget)
 
     return B_ext
 
@@ -407,3 +399,48 @@ def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, ntheta
     gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
 
     return surface_current, gamma_surf_interp
+
+@lru_cache(maxsize=32)
+def build_virtual_casing_splitting_interpolants(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32):
+    """Interpolate the nonvacuum surface current n x B_nonvac and the surface coordinates on the flux surface
+    for the splitting method of computing the virtual casing integral.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants.
+        X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
+            of radius r at which to evaluate B_external. The points do not necessarily need
+            to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
+            axis, uniformly spaced in the axis cylindrical phi.
+    Returns:
+        (tensor): (nphi, ntheta, 3) tensor of evaluations of the surface current n x B_nonvac on the surface.
+        (tensor): (nphi, ntheta, 3) tensor of evaluations of the Cartesian surface coordinates.
+
+    """
+    # components of integrand
+    dvarphi_by_dphi = self.d_varphi_d_phi
+    n = self.surface_normal(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    g = self.surface(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    b = self.B_taylor(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
+    b_vac = self.B_taylor(r=r, ntheta=ntheta_eval, vacuum_component=True) # (nphi, ntheta, 3)
+    b_nonvac = b - b_vac # (nphi, ntheta, 3)
+    nb = torch.linalg.cross(n, b_nonvac) * dvarphi_by_dphi.reshape((-1,1,1))
+
+    # map out full torus
+    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    n_cross_B_nonvac = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
+    for ii in range(self.nfp):
+        g = rotate_nfp(g, ii, self.nfp)
+        gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
+        nb = rotate_nfp(nb, ii, self.nfp)
+        n_cross_B_nonvac[ii * self.nphi : (ii+1) * self.nphi] = nb
+
+    # interpolate
+    surface_current_interp = fourier_interp2d_regular_grid(n_cross_B_nonvac, nphi, ntheta) # (nphi, ntheta, 3)
+    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
+
+
+    return surface_current_interp, gamma_surf_interp
