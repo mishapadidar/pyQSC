@@ -205,9 +205,34 @@ def test_B_external_on_axis_split():
     plt.tight_layout()
     plt.show()
 
+def test_grad_B_external_on_axis_split():
+    """
+    Test the accuracy of the grad_B_external_on_axis_split computation
+    """
+    mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
+    ntheta = 256
+    nphi = 4096
+
+    """ Check accuracy in vacuum """
+    stel = Qsc.from_paper("precise QA", nphi=31, I2=0.0, p2=0.0, order='r2')
+    grad_B_vac = stel.grad_B_tensor_cartesian() # (3, 3, nphi)
+
+    # storage 
+    errs = []
+    for mr in mr_list:
+        with torch.no_grad():
+            grad_Bext_vc = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        err = grad_B_vac - grad_Bext_vc
+        errs.append(torch.max(torch.abs(err)).detach().numpy())
+    
+    # should be zero error!
+    assert np.allclose(errs, 0.0), "grad_B_external_on_axis_split incorrect in vacuum case"
+
+
 if __name__ == "__main__":
     test_B_external_on_axis()
     test_n_cross_B()
     test_grad_B_external_on_axis_accuracy()
     test_grad_B_external_on_axis_consistency()
     test_B_external_on_axis_split()
+    test_grad_B_external_on_axis_split()

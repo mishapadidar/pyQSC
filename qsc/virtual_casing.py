@@ -141,10 +141,9 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
         nphi (int, optional): number of phi quadrature points. Defaults to 1024.
         ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
             to building interpolants.
-        X_target (tensor, optional): (n, 3) tensor of n target points inside the surface
-            of radius r at which to evaluate B_external. The points do not necessarily need
-            to be on magnetic axis. Defaults to (nphi, 3) tensor of points on the magnetic 
-            axis, uniformly spaced in the axis cylindrical phi.
+        ntarget (int, optional): number of target points to evaluate B_external on the magnetic axis.
+            If ntarget is 0, it will default to nphi points on the magnetic axis, 
+            uniformly spaced in the axis cylindrical phi.
     Returns:
         (tensor): (3, n) tensor of evaluations of B_external.
     """
@@ -154,27 +153,8 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     X_target, _, idx = self.subsample_axis_nodes(ntarget) # (3, ntarget), (ntarget,)
     X_target = X_target.T
 
-    # components of integrand
-    dvarphi_by_dphi = self.d_varphi_d_phi
-    n = self.surface_normal(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
-    g = self.surface(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
-    b = self.B_taylor(r=r, ntheta=ntheta_eval) # (nphi, ntheta, 3)
-    b_vac = self.B_taylor(r=r, ntheta=ntheta_eval, vacuum_component=True) # (nphi, ntheta, 3)
-    b_nonvac = b - b_vac # (nphi, ntheta, 3)
-    nb = torch.linalg.cross(n, b_nonvac) * dvarphi_by_dphi.reshape((-1,1,1))
-
-    # map out full torus
-    gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
-    n_cross_B_nonvac = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
-    for ii in range(self.nfp):
-        g = rotate_nfp(g, ii, self.nfp)
-        gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        nb = rotate_nfp(nb, ii, self.nfp)
-        n_cross_B_nonvac[ii * self.nphi : (ii+1) * self.nphi] = nb
-
-    # interpolate
-    n_cross_B_interp = fourier_interp2d_regular_grid(n_cross_B_nonvac, nphi, ntheta) # (nphi, ntheta, 3)
-    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
+    # get interpolated data
+    n_cross_B_interp, gamma_surf_interp = build_virtual_casing_splitting_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
 
     dtheta = 2 * torch.pi / ntheta
     dphi = 2 * torch.pi / nphi
@@ -203,6 +183,62 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     B_ext = B_vac + B_ext_nonvac # (3, ntarget)
 
     return B_ext
+
+def grad_B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
+    """Compute grad_B_external on the magnetic axis using the virtual casing principle.
+    This function splits the magnetic field into vacuum and non-vacuum components to ensure
+    accuracy of the computation in vacuum.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+        ntheta_eval (int, optional): number of theta points at which to evaluate integrand prior
+            to building interpolants.
+        ntarget (int, optional): number of target points to evaluate B_external on the magnetic axis.
+            If ntarget is 0, it will default to nphi points on the magnetic axis, 
+            uniformly spaced in the axis cylindrical phi.
+    Returns:
+        (tensor): (3, 3, n) tensor of evaluations of B_external. 
+            The gradient is a symmetric matrix at each target point.
+    """
+    if ntarget == 0:
+        ntarget = self.nphi
+    X_target, _, idx = self.subsample_axis_nodes(ntarget) # (3, ntarget), (ntarget,)
+    X_target = X_target.T
+
+    # get interpolated data
+    surface_current_interp, gamma_surf_interp = build_virtual_casing_splitting_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
+
+    dtheta = 2 * torch.pi / ntheta
+    dphi = 2 * torch.pi / nphi
+    eye = torch.eye(3)
+    
+    # compute the non-vacuum component with the integral
+    grad_B_ext_nonvac = torch.zeros((3, 3, ntarget))
+    for ii in range(ntarget):
+        # biot-savart kernel
+        rprime = X_target[ii] - gamma_surf_interp # (nphi, ntheta, 3)
+        norm_rprime_cubed = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**3) # (nphi, ntheta, 1)
+        norm_rprime_fifth = (torch.sqrt(torch.sum(rprime**2, dim=-1, keepdims=True))**5) # (nphi, ntheta, 1)
+        second_term = 3 * rprime / norm_rprime_fifth
+
+        for jj in range(3):
+
+            dkernel_by_djj = eye[jj].reshape((1,1,-1))/norm_rprime_cubed - rprime[:,:,jj][:,:,None] * second_term
+
+            # cross product
+            integrand = torch.linalg.cross(dkernel_by_djj, surface_current_interp, dim=-1) # (nphi, ntheta, 3)
+
+            grad_B_ext_nonvac[:, jj, ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
+    
+    # grad_B_vac at axis nodes
+    grad_B_vac = self.grad_B_tensor_cartesian(vacuum_component=True)[:,:,idx] # (3, 3, ntarget)
+
+    grad_B_ext = grad_B_vac + grad_B_ext_nonvac # (3, 3, ntarget)
+
+    return grad_B_ext
+
 
 @lru_cache(maxsize=32)
 def B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, ntarget=0):
