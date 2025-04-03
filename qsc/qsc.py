@@ -30,8 +30,8 @@ class Qsc(torch.nn.Module):
     from .grad_B_tensor import (calculate_grad_B_tensor, calculate_grad_grad_B_tensor,
         Bfield_cylindrical, Bfield_cartesian, grad_B_tensor_cartesian,
         grad_grad_B_tensor_cylindrical, grad_grad_B_tensor_cartesian,
-        calculate_grad_B_tensor_vac)
-    from .calculate_r2 import calculate_r2
+        calculate_grad_B_tensor_vac, calculate_grad_grad_B_tensor_vac)
+    from .calculate_r2 import calculate_r2, calculate_r2_vac
     from .calculate_r3 import calculate_r3, calculate_shear
     from .geo import (surface, dsurface_by_dvarphi, dsurface_by_dtheta,
                       dsurface_by_dr, surface_normal, surface_nonvac)
@@ -152,6 +152,7 @@ class Qsc(torch.nn.Module):
         self.r1_diagnostics()
         if self.order != 'r1':
             self.calculate_r2()
+            self.calculate_r2_vac()
             if self.order == 'r3':
                 self.calculate_r3()
         self.clear_cache()

@@ -187,13 +187,36 @@ def test_calculate_grad_B_tensor_vac():
 
     # in vacuum, total solution and vacuum components should match
     assert torch.allclose(stel_vac.grad_B_tensor_cylindrical, stel_vac.grad_B_tensor_cylindrical_vac, atol=1e-14), "grad_B_tensor_cylindrical or grad_B_tensor_cylindrical incorect in vacuum"
+    assert torch.allclose(stel_vac.grad_B_tensor_cartesian(), stel_vac.grad_B_tensor_cartesian(vacuum_component=True), atol=1e-14), "grad_grad_B or grad_grad_B_vac incorect in vacuum"
 
     # vacuum component of nonvac field should match the total vacuum solution
     err = stel_vac.grad_B_tensor_cylindrical - stel.grad_B_tensor_cylindrical_vac
     assert torch.allclose(stel.grad_B_tensor_cylindrical_vac, stel_vac.grad_B_tensor_cylindrical, atol=1e-14), "grad_B_tensor_cylindrical or grad_B_tensor_cylindrical_vac incorect"
+    assert torch.allclose(stel.grad_B_tensor_cartesian(vacuum_component=True), stel_vac.grad_B_tensor_cartesian(vacuum_component=False), atol=1e-14), "grad_grad_B or grad_grad_B_vac incorect in vacuum"
 
     print("PASSED: test_calculate_grad_B_tensor_vac")
+
+def test_calculate_grad_grad_B_tensor_vac():
+    """Test the calculate_grad_grad_B_tensor_vac method
+    """
+    stel = Qsc.from_paper("precise QA", I2 = 100, order='r2')
+    stel_vac = Qsc.from_paper("precise QA", I2 = 0.0, order='r2')
+
+    # in vacuum, total solution and vacuum components should match
+    assert torch.allclose(stel_vac.grad_grad_B, stel_vac.grad_grad_B_vac, atol=1e-14), "grad_grad_B or grad_grad_B_vac incorect in vacuum"
+    assert torch.allclose(stel_vac.grad_grad_B_tensor_cartesian(), stel_vac.grad_grad_B_tensor_cartesian(vacuum_component=True), atol=1e-14), "grad_grad_B or grad_grad_B_vac incorect in vacuum"
+
+
+    # vacuum component of nonvac field should match the total vacuum solution
+    err = stel_vac.grad_grad_B - stel.grad_grad_B_vac
+    assert torch.allclose(stel.grad_grad_B_vac, stel_vac.grad_grad_B, atol=1e-14), "grad_grad_B or grad_grad_B_vac incorect"
+    assert torch.allclose(stel.grad_grad_B_tensor_cartesian(vacuum_component=True), stel_vac.grad_grad_B_tensor_cartesian(vacuum_component=False), atol=1e-14), "grad_grad_B or grad_grad_B_vac incorect in vacuum"
+
+
+    print("PASSED: test_calculate_grad_grad_B_tensor_vac")
+
 
 if __name__ == "__main__":
     unittest.main()
     test_calculate_grad_B_tensor_vac()
+    test_calculate_grad_grad_B_tensor_vac()
