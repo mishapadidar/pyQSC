@@ -10,7 +10,6 @@ from functools import lru_cache
 import torch
 from .util import rotate_nfp
 from .fourier_tools import fourier_interp2d_regular_grid
-from torch.jit import script
 
 
 #logging.basicConfig(level=logging.INFO)
@@ -154,7 +153,8 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     X_target = X_target.T
 
     # get interpolated data
-    n_cross_B_interp, gamma_surf_interp = build_virtual_casing_splitting_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
+    # n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
+    n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
 
     dtheta = 2 * torch.pi / ntheta
     dphi = 2 * torch.pi / nphi
@@ -208,7 +208,7 @@ def grad_B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eva
     X_target = X_target.T
 
     # get interpolated data
-    surface_current_interp, gamma_surf_interp = build_virtual_casing_splitting_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
+    surface_current_interp, gamma_surf_interp = build_virtual_casing_interpolants_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
 
     dtheta = 2 * torch.pi / ntheta
     dphi = 2 * torch.pi / nphi
@@ -260,8 +260,8 @@ def B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     if ntarget == 0:
         ntarget = self.nphi
     Xtarget = self.subsample_axis_nodes(ntarget)[0] # (3, ntarget)
-
     return B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
+    # return B_external_on_axis_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, ntarget=ntarget)
 
 def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
@@ -330,6 +330,7 @@ def grad_B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eva
     Xtarget = self.subsample_axis_nodes(ntarget)[0] # (3, ntarget)
 
     return grad_B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
+    # return grad_B_external_on_axis_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, ntarget=ntarget)
 
 def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle.
@@ -437,7 +438,7 @@ def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, ntheta
     return surface_current, gamma_surf_interp
 
 @lru_cache(maxsize=32)
-def build_virtual_casing_splitting_interpolants(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32):
+def build_virtual_casing_interpolants_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32):
     """Interpolate the nonvacuum surface current n x B_nonvac and the surface coordinates on the flux surface
     for the splitting method of computing the virtual casing integral.
 
@@ -477,6 +478,5 @@ def build_virtual_casing_splitting_interpolants(self, r=0.1, ntheta=256, nphi=10
     # interpolate
     surface_current_interp = fourier_interp2d_regular_grid(n_cross_B_nonvac, nphi, ntheta) # (nphi, ntheta, 3)
     gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
-
 
     return surface_current_interp, gamma_surf_interp
