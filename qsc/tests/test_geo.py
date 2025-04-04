@@ -146,8 +146,57 @@ def test_surface_autodiff():
     assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
 
 
+def test_normal_autodiff():
+    """
+    Test autodifferentation of normal
+    """
+    ntheta = 256
+    r = 0.1
+    
+    stel = Qsc.from_paper("precise QA", nphi=31, I2=10.0, p2=-1e4, order='r2')
+
+    normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
+    loss = torch.mean(normal**2)/100
+
+    # compute the gradient using autodiff
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
+        return torch.mean(normal**2)/100
+    dloss_by_drc_fd = finite_difference_torch(fd_obj, torch.clone(stel.rc.detach()), 1e-8)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    assert err.item() < 1e-4, f"dloss/drc finite difference check failed: {err.item()}"
+
+    # check zs gradient with finite difference
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
+        return torch.mean(normal**2)/100
+    dloss_by_dzs_fd = finite_difference_torch(fd_obj, torch.clone(stel.zs.detach()), 1e-8)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    assert err.item() < 1e-4, f"dloss/dzs finite difference check failed: {err.item()}"
+
+    # check etabar gradient with finite difference
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
+        return torch.mean(normal**2)/100
+    dloss_by_detabar_fd = finite_difference_torch(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
+    assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
+
 if __name__ == "__main__":
     test_surface()
     test_surface_tangents()
     test_surface_nonvac()
     test_surface_autodiff()
+    test_normal_autodiff()
