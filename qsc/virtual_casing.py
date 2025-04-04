@@ -29,7 +29,6 @@ def B_taylor(self, r, ntheta=64, vacuum_component=False):
         B_surf: (nphi, ntheta, 3) array containing the magnetic field on the flux surface.
     """
 
-    self.calculate()
     B0 = self.Bfield_cartesian() # (3, nphi)
 
     # [i, j, k]; i indexes Cartesian dofs; j indexes B; k indexes axis
@@ -40,7 +39,7 @@ def B_taylor(self, r, ntheta=64, vacuum_component=False):
     nphi = self.nphi
 
     # compute flux surface
-    gamma_axis = self.XYZ0.T # (nphi, 3)
+    gamma_axis = torch.clone(self.XYZ0.T) # (nphi, 3)
     gamma_surf = self.surface(r, ntheta=ntheta) # (nphi, ntheta, 3)
 
     # now Taylor expand
@@ -153,7 +152,6 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     X_target = X_target.T
 
     # get interpolated data
-    # n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
     n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
 
     dtheta = 2 * torch.pi / ntheta
