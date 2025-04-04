@@ -3,7 +3,7 @@ import numpy as np
 from qsc.qsc import Qsc
 import torch
 import matplotlib.pyplot as plt
-from qsc.util import finite_difference
+from qsc.util import finite_difference, finite_difference_torch
 
 
 def test_B_external_on_axis():
@@ -228,6 +228,131 @@ def test_grad_B_external_on_axis_split():
     # should be zero error!
     assert np.allclose(errs, 0.0), "grad_B_external_on_axis_split incorrect in vacuum case"
 
+def test_B_external_on_axis_split_autodiff():
+    """
+    Test autodifferentation of B_external_on_axis_split
+    """
+    ntheta = 256
+    nphi=2048
+    r = 0.1
+    
+    stel = Qsc.from_paper("precise QA", nphi=61, I2=1.0, p2=-1e3, order='r2')
+    
+    # mean squared error
+    B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+    mean = torch.mean(B_ext).detach()
+    loss = torch.mean((B_ext - mean)**2)
+
+    # compute the gradient using autodiff
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+
+    # check rc gradient with finite difference
+    x0 = torch.clone(stel.rc.detach())
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        loss = torch.mean((B_ext - mean)**2).detach()
+        return loss
+    dloss_by_drc_fd = finite_difference_torch(fd_obj, x0, 1e-7)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/drc finite difference check failed: {err.item()}"
+    stel.rc.data = x0 # restore the original value after finite difference check
+
+    # check rc gradient with finite difference
+    x0 = torch.clone(stel.zs.detach())
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        loss = torch.mean((B_ext - mean)**2).detach()
+        return loss
+    dloss_by_dzs_fd = finite_difference_torch(fd_obj, x0, 1e-7)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/dzs finite difference check failed: {err.item()}"
+    stel.zs.data = x0 # restore the original value after finite difference check
+
+    # check etabar gradient with finite difference
+    x0 = torch.clone(torch.tensor([stel.etabar.detach()]))
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        loss = torch.mean((B_ext - mean)**2).detach()
+        return loss
+    dloss_by_detabar_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/detabar finite difference check failed: {err.item()}"
+    stel.etabar.data = x0 # restore the original value after finite difference check
+
+def test_B_taylor_autodiff():
+    """
+    Test autodifferentation of B_taylor
+    """
+    ntheta = 256
+    r = 0.1
+    vacuum_component=False
+    
+    stel = Qsc.from_paper("precise QA", nphi=61, I2=1.0, p2=-1e3, order='r2')
+
+    B_taylor = stel.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+    mean = torch.mean(B_taylor).detach()
+    loss = torch.mean((B_taylor - mean)**2)
+
+    # compute the gradient using autodiff
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    x0 = torch.clone(stel.rc.detach())
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        B_taylor = stel.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+        loss = torch.mean((B_taylor - mean)**2).detach()
+        return loss
+    dloss_by_drc_fd = finite_difference_torch(fd_obj, x0, 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/drc finite difference check failed: {err.item()}"
+    stel.rc.data = x0 # restore the original value after finite difference check
+
+    # check zs gradient with finite difference
+    x0 = torch.clone(stel.zs.detach())
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        B_taylor = stel.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+        loss = torch.mean((B_taylor - mean)**2).detach()
+        return loss
+    dloss_by_dzs_fd = finite_difference_torch(fd_obj, x0, 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/dzs finite difference check failed: {err.item()}"
+    stel.zs.data = x0 # restore the original value after finite difference check
+
+    # check etabar gradient with finite difference
+    x0 = torch.clone(torch.tensor([stel.etabar.detach()]))
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        B_taylor = stel.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+        loss = torch.mean((B_taylor - mean)**2).detach()
+        return loss
+    dloss_by_detabar_fd = finite_difference_torch(fd_obj, x0, 1e-6)
+    err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/detabar finite difference check failed: {err.item()}"
+    stel.etabar.data = x0 # restore the original value after finite difference check
 
 if __name__ == "__main__":
     test_B_external_on_axis()
@@ -236,3 +361,5 @@ if __name__ == "__main__":
     test_grad_B_external_on_axis_consistency()
     test_B_external_on_axis_split()
     test_grad_B_external_on_axis_split()
+    test_B_external_on_axis_split_autodiff()
+    test_B_taylor_autodiff()

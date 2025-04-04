@@ -258,8 +258,8 @@ def B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     if ntarget == 0:
         ntarget = self.nphi
     Xtarget = self.subsample_axis_nodes(ntarget)[0] # (3, ntarget)
-    return B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
-    # return B_external_on_axis_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, ntarget=ntarget)
+    # return B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
+    return B_external_on_axis_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, ntarget=ntarget)
 
 def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
@@ -327,8 +327,8 @@ def grad_B_external_on_axis_nodes(self, r=0.1, ntheta=256, nphi=1024, ntheta_eva
         ntarget = self.nphi
     Xtarget = self.subsample_axis_nodes(ntarget)[0] # (3, ntarget)
 
-    return grad_B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
-    # return grad_B_external_on_axis_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, ntarget=ntarget)
+    # return grad_B_external_on_axis(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, X_target=Xtarget.T)
+    return grad_B_external_on_axis_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval, ntarget=ntarget)
 
 def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32, X_target=[]):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle.
