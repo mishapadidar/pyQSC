@@ -117,6 +117,9 @@ def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
     ntarget = B_target.shape[1]
     d_l_d_phi = self.subsample_axis_nodes(ntarget)[1] # (ntarget,)
     Bext_vc = self.B_external_on_axis_nodes(r=r, ntheta=ntheta, nphi=nphi, ntarget=ntarget) # (3, ntarget)
+    # TODO: dphi is not correct if nodes are not evenly spaced
+    # TODO: need to use idx to get the spacing.
+
     dphi = (2 * torch.pi / self.nfp) / ntarget
     dl = d_l_d_phi * dphi # (ntarget,)
     loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
@@ -148,8 +151,9 @@ def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=256, nphi=1024):
 
 def total_derivative(self, loss):
     """Get the total derivative of a loss function with respect to the DOFs.
+    The derivative of loss(sigma, iota, sigma_vac, iota_vac) with respect to the DOFS, x, is
         dloss/dx = dloss/d(sigma,iota) * d(sigma,iota)/dx + dloss/dx
-
+                + dloss/d(sigma_vac,iota_vac) * d(sigma_vac,iota_vac)/dx 
     Example:
         stel = Qsc.from_paper("precise QA", order='r1')
         gradB_target = 1.34 + torch.clone(stel.grad_B_tensor_cartesian()).detach()
@@ -173,22 +177,35 @@ def total_derivative(self, loss):
     # make sure derivatives are not None
     partialloss_by_partialsigma = self.sigma.grad
     partialloss_by_partialiota = self.iota.grad 
+    partialloss_by_partialsigma_vac = self.sigma_vac.grad
+    partialloss_by_partialiota_vac = self.iota_vac.grad 
     if partialloss_by_partialsigma is None:
         partialloss_by_partialsigma = torch.zeros(self.nphi)
     if partialloss_by_partialiota is None:
         partialloss_by_partialiota = torch.zeros(1)
+    if partialloss_by_partialsigma_vac is None:
+        partialloss_by_partialsigma_vac = torch.zeros(self.nphi)
+    if partialloss_by_partialiota_vac is None:
+        partialloss_by_partialiota_vac = torch.zeros(1)
 
     # solve adjoint
     partialloss_by_partialz = torch.clone(partialloss_by_partialsigma).detach()
     partialloss_by_partialz[0] = torch.clone(partialloss_by_partialiota).detach()
     partialloss_by_partial_dofs = self.dresidual_by_ddof_vjp(partialloss_by_partialz) # tuple; sorted by dof
 
-    # chain rule dloss/dz * dz/dx + dloss/dx
+    # solve adjoint for vacuum components
+    partialloss_by_partialz_vac = torch.clone(partialloss_by_partialsigma_vac).detach()
+    partialloss_by_partialz_vac[0] = torch.clone(partialloss_by_partialiota_vac).detach()
+    partialloss_by_partial_dofs_vac = self.dresidual_vac_by_ddof_vjp(partialloss_by_partialz_vac) # tuple; sorted by dof
+
+    # chain rule dloss/dz * dz/dx + dloss/dz_vac * dz_vac/dx + dloss/dx
     dloss_by_ddofs = []
     for ii, x in enumerate(dofs):
         dloss_by_dx = torch.zeros_like(x)
         if partialloss_by_partial_dofs[ii] is not None:
             dloss_by_dx += partialloss_by_partial_dofs[ii]
+        if partialloss_by_partial_dofs_vac[ii] is not None:
+            dloss_by_dx += partialloss_by_partial_dofs_vac[ii]
         if x.grad is not None:
             dloss_by_dx += x.grad
 

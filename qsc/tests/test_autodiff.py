@@ -77,12 +77,57 @@ def test_sigma_iota_derivatives():
     print('dsigma/detabar err', err.item())
     assert err < 1e-5
 
+
+def test_sigma_iota_vac_derivatives():
+    """
+    Test the accuracy of the derivatives computed in the vacuum part of the solve_state function: 
+    derivatives of sigma_vac and iota_vac with respect to etabar, the axis shape coeffs.
+    We check the derivatives with finite difference.
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", order='r2')
+
+    # for name, param in stel.named_parameters():
+    #  print(name, param)
+
+    # compute derivatives of sigma and iota wrt dofs
+    v = torch.ones(stel.nphi)/stel.nphi
+    vjp = stel.dresidual_by_ddof_vjp(v) # tuple, one entry per dof tensor
+
+    # test derivative wrt rc
+    def obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        sigma = torch.clone(stel.sigma_vac).detach()
+        sigma[0] = torch.clone(stel.iota_vac).detach()
+        return sigma
+    x = torch.clone(stel.rc.detach())
+    deriv_fd = finite_difference(obj, x, 1e-6) # (nphi, dim_dof)
+    vjp_fd = torch.matmul(deriv_fd.T, v)
+    err = torch.max(torch.abs(vjp[0] - vjp_fd))
+    print('dsigma_vac/drc err', err.item())
+    assert err < 1e-5
+
+    # test derivative wrt etabar
+    def obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        sigma = torch.clone(stel.sigma_vac).detach()
+        sigma[0] = torch.clone(stel.iota_vac).detach()
+        return sigma
+    x = torch.clone(torch.tensor([stel.etabar.detach()]))
+    deriv_fd = finite_difference(obj, x, 1e-6).flatten() # (nphi, dim_dof)
+    vjp_fd = torch.sum(deriv_fd * v)
+    err = torch.max(torch.abs(vjp[4] - vjp_fd))
+    print('dsigma_vac/detabar err', err.item())
+    assert err < 1e-5
+
 def test_Bfield_axis_mse():
     """
     Test derivativative of Bfield_axis_mse with finite difference.
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", order='r1')
+    stel = Qsc.from_paper("precise QA", order='r2')
 
     # check loss
     stel.zero_grad()
@@ -379,9 +424,173 @@ def test_r2_derivatives():
     print('dY2s/detabar err', err.item())
     assert err.item() < 1e-4, "dY2s/detabar incorrect"
 
+
+def test_r2_vac_derivatives():
+    """
+    Test the derivatives of the vacuum r2 quantities.
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", order='r2')
+    rc0 = torch.clone(stel.rc).detach()
+    zs0 = torch.clone(stel.zs).detach()
+    etabar0 = torch.clone(stel.etabar).detach()
+
+    """ Derivatives of X20 """
+    loss = torch.mean(stel.X20_vac**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.X20_vac**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dX20_vac/drc err', err.item())
+    assert err.item() < 1e-4, "dX20_vac/drc incorrect"
+
+    # check zs gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.X20_vac**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dX20_vac/dzs err', err.item())
+    assert err.item() < 1e-4, "dX20_vac/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.X20_vac**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dX20_vac/detabar err', err.item())
+    assert err.item() < 1e-4, "dX20_vac/detabar incorrect"
+
+    """ Derivatives of X2c """
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    loss = torch.mean(stel.X2c_vac**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c_vac**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dX2c_vac/drc err', err.item())
+    assert err.item() < 1e-4, "dX2c_vac/drc incorrect"
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c_vac**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dX2c_vac/dzs err', err.item())
+    assert err.item() < 1e-4, "dX2c_vac/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c_vac**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dX2c_vac/detabar err', err.item())
+    assert err.item() < 1e-4, "dX2c_vac/detabar incorrect"
+
+    """ Derivatives of Y2s """
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    loss = torch.mean(stel.Y2s_vac**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s_vac**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dY2s_vac/drc err', err.item())
+    assert err.item() < 1e-4, "dY2s_vac/drc incorrect"
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s_vac**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dY2s_vac/dzs err', err.item())
+    assert err.item() < 1e-4, "dY2s_vac/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s_vac**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dY2s_vac/detabar err', err.item())
+    assert err.item() < 1e-4, "dY2s_vac/detabar incorrect"
+
 if __name__ == "__main__":
-    # test_sigma_iota_derivatives()
-    # test_Bfield_axis_mse()
-    # test_grad_B_tensor_cartesian_mse()
-    # test_sum_loss()
+    test_sigma_iota_derivatives()
+    test_sigma_iota_vac_derivatives()
+    test_Bfield_axis_mse()
+    test_grad_B_tensor_cartesian_mse()
+    test_sum_loss()
     test_r2_derivatives()
+    test_r2_vac_derivatives()
