@@ -5,6 +5,8 @@ import numpy as np
 import logging
 from qsc.qsc import Qsc
 import torch
+from qsc.util import finite_difference_torch
+
 
 logger = logging.getLogger(__name__)
 
@@ -215,8 +217,65 @@ def test_calculate_grad_grad_B_tensor_vac():
 
     print("PASSED: test_calculate_grad_grad_B_tensor_vac")
 
+def test_grad_grad_B_tensor_autodiff():
+    """
+    Test derivativative of grad_B_tensor_cartesian_mse with finite difference.
+    """
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", order='r2', I2=0.0, p2=0.0)
+
+    # check loss
+    grad_grad_B = stel.grad_grad_B_tensor_cartesian()
+    target = torch.mean(torch.clone(grad_grad_B)).detach()
+    loss = torch.mean((grad_grad_B - target) ** 2)
+
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+
+    # check rc gradient with finite difference
+    x0 = torch.clone(stel.rc.detach())
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        grad_grad_B = stel.grad_grad_B_tensor_cartesian()
+        return torch.mean((grad_grad_B - target) ** 2).detach()
+    dloss_by_drc_fd = finite_difference_torch(fd_obj, x0, 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    assert err.item() < 1e-3, f"dloss/drc finite difference check failed: {err.item()}"
+    stel.rc.data = x0 # restore the original value after finite difference check
+
+    # check zs gradient with finite difference
+    x0 = torch.clone(stel.zs.detach())
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        grad_grad_B = stel.grad_grad_B_tensor_cartesian()
+        return torch.mean((grad_grad_B - target) ** 2).detach()
+    dloss_by_dzs_fd = finite_difference_torch(fd_obj, x0, 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    assert err.item() < 1e-3, f"dloss/dzs finite difference check failed: {err.item()}"
+    stel.zs.data = x0 # restore the original value after finite difference check
+
+    # check etabar gradient with finite difference
+    x0 = torch.clone(torch.tensor([stel.etabar.detach()]))
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        grad_grad_B = stel.grad_grad_B_tensor_cartesian()
+        return torch.mean((grad_grad_B - target) ** 2).detach()
+    dloss_by_detabar_fd = finite_difference_torch(fd_obj, x0, 1e-4)
+    err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
+    assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
+    stel.etabar.data = x0 # restore the original value after finite difference check
+
+    print("PASSED: test_grad_grad_B_tensor_autodiff")
+
+
 
 if __name__ == "__main__":
     unittest.main()
     test_calculate_grad_B_tensor_vac()
     test_calculate_grad_grad_B_tensor_vac()
+    test_grad_grad_B_tensor_autodiff()
