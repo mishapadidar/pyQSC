@@ -151,6 +151,13 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
     X_target, _, idx = self.subsample_axis_nodes(ntarget) # (3, ntarget), (ntarget,)
     X_target = X_target.T
 
+    # B_vac at axis nodes
+    B_vac = self.Bfield_cartesian()[:,idx] # (3, ntarget)
+
+    if (self.p2 == 0.0) and (self.I2 == 0.0):
+        # in vacuum, return vacuum solution
+        return B_vac
+
     # get interpolated data
     n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
 
@@ -171,9 +178,6 @@ def B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32,
         integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dtheta * dphi, dim=(0,1)) # (3,)
 
         return integral
-    
-    # B_vac at axis nodes
-    B_vac = self.Bfield_cartesian()[:,idx] # (3, ntarget)
 
     # nonvacuum component
     B_ext_nonvac = torch.stack([B_ext_of_phi(ii) for ii in range(ntarget)]).T # (3, ntarget)
@@ -205,6 +209,13 @@ def grad_B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eva
     X_target, _, idx = self.subsample_axis_nodes(ntarget) # (3, ntarget), (ntarget,)
     X_target = X_target.T
 
+    # grad_B_vac at axis nodes
+    grad_B_vac = self.grad_B_tensor_cartesian(vacuum_component=True)[:,:,idx] # (3, 3, ntarget)
+
+    if (self.p2 == 0.0) and (self.I2 == 0.0):
+        # in vacuum, return vacuum solution
+        return grad_B_vac
+
     # get interpolated data
     surface_current_interp, gamma_surf_interp = build_virtual_casing_interpolants_split(self, r=r, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta_eval)
 
@@ -230,9 +241,6 @@ def grad_B_external_on_axis_split(self, r=0.1, ntheta=256, nphi=1024, ntheta_eva
 
             grad_B_ext_nonvac[:, jj, ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
     
-    # grad_B_vac at axis nodes
-    grad_B_vac = self.grad_B_tensor_cartesian(vacuum_component=True)[:,:,idx] # (3, 3, ntarget)
-
     grad_B_ext = grad_B_vac + grad_B_ext_nonvac # (3, 3, ntarget)
 
     return grad_B_ext
