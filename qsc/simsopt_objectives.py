@@ -944,3 +944,77 @@ class AxisArcLengthVariation(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dobj()
+
+class SurfaceSelfIntersectionPenalty(Optimizable):
+
+    def __init__(self, qsc, r, ntheta=64, tol=1e-2):
+        """Penalty on the self-intersection of flux surfaces.
+        Flux surfaces self-intersect when the jacobian of the coordinate
+        transformation, sqrtg, becomes singular. This penalty attempts to enforce
+        the constraint,
+            sqrtg(theta_ij, phi_ij) >= tol,
+        at each quadrature point (theta_ij, phi_ij) on a flux surface. The penalty function is,
+            J = mean_ij (max(0, tol - sqrtg_ij))**2 / tol.
+        We dont divide by tol^2 since tol is a small number.
+
+        This class is a Simsopt Optimizable object.
+
+        Args:
+            qsc (Optimizable, Qsc): Optimizable Qsc object.
+            r (float): minor radius of the flux surface to evaluate.
+            ntheta (int, optional): Number of theta quadrature points at which to evaluate objective
+                on the flux surface. Defaults to 64.
+            tol (float, optional): tolerance for the jacobian. Defaults to 1e-2.
+        """
+        self.qsc = qsc
+        self.r = r
+        self.ntheta = ntheta
+        self.tol = torch.tensor(tol)
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    def obj(self):
+        """Compute the objective.
+
+        Returns:
+            tensor: float tensor of the objective value.
+        """
+        sqrtg = self.qsc.jacobian(r = self.r, ntheta=self.ntheta)
+        violation = torch.max(torch.tensor(0.0), self.tol - sqrtg)
+        J = torch.mean(violation**2) / self.tol
+        return J
+
+    def dobj(self):
+        """Gradient of the obj function with respect to axis coefficients.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function as a numpy array.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()

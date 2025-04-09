@@ -6,7 +6,7 @@ from simsopt.geo import create_equally_spaced_curves
 from simsopt.field import Current, coils_via_symmetries, BiotSavart
 from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
                                     IotaPenalty, AxisLengthPenalty, LGradB, B20Penalty, MagneticWellPenalty,
-                                    GradFieldError, AxisArcLengthVariation)
+                                    GradFieldError, AxisArcLengthVariation, SurfaceSelfIntersectionPenalty)
 from scipy.optimize import approx_fprime
 from qsc.util import finite_difference
 
@@ -451,6 +451,27 @@ def test_AxisArcLengthVariationPenalty():
     print(err)
     assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
 
+def test_SurfaceSelfIntersectionPenalty():
+    # use larger |p2| so that the surface is self-intersecting
+    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1.8e6, nphi=99)
+    r = 0.1
+    ip = SurfaceSelfIntersectionPenalty(stel, r=r, ntheta=32)
+    stel.unfix_all()
+    ip.unfix_all()
+    x0 = ip.x
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ()
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(x):
+        stel.x = x
+        return ip.J()
+    dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-9)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
+    print(err)
+    assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
+
 if __name__ == "__main__":
     test_FieldError()
     test_GradFieldError()
@@ -462,3 +483,4 @@ if __name__ == "__main__":
     test_B20Penalty()
     test_MagneticWellPenalty()
     test_AxisArcLengthVariationPenalty()
+    test_SurfaceSelfIntersectionPenalty()
