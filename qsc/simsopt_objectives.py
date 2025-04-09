@@ -886,3 +886,61 @@ class MagneticWellPenalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dobj()
+
+class AxisArcLengthVariation(Optimizable):
+
+    def __init__(self, qsc):
+        """Penalty on the variance of the arc length of the magnetic axis, 
+            J = Var(d_l_d_phi)
+
+        Args:
+            qsc (Optimizable, Qsc)
+        """
+        self.qsc = qsc
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    def obj(self):
+        """Compute the objective.
+
+        Returns:
+            tensor: float tensor of the objective value.
+        """
+        d_l_d_phi = self.qsc.d_l_d_phi
+        J = torch.var(d_l_d_phi)
+        return J
+
+    def dobj(self):
+        """Gradient of the obj function with respect to axis coefficients.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function as a numpy array.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
