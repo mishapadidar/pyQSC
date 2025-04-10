@@ -336,30 +336,36 @@ class ExternalFieldError(Optimizable):
         dJ_by_dbs = self.bs.B_vjp((B_coil - B_qsc)*dl) # Derivative object
 
         """ Derivative w.r.t. axis coeffs """
-        # this part of the derivative treats B_coil as a constant, independent of the axis
-        loss = torch.clone(self.field_error())
-        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+        
+        # dont compute anything if axis dofs are all fixed
+        if np.any(self.qsc.dofs_free_status):
 
-        # derivative of B_coil(xyz(axis_coeffs)) term
-        # self.qsc.zero_grad()
-        dB_by_dX_bs = self.bs.dB_by_dX() # (ntarget, 3, 3)
-        term21 = np.einsum("ji,jki->jk", ((B_coil - B_qsc) * dl), dB_by_dX_bs) # (ntarget, 3)
+            # this part of the derivative treats B_coil as a constant, independent of the axis
+            loss = torch.clone(self.field_error())
+            dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
-        dofs = self.qsc.get_dofs(as_tuple=True)
-        term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
+            # derivative of B_coil(xyz(axis_coeffs)) term
+            # self.qsc.zero_grad()
+            dB_by_dX_bs = self.bs.dB_by_dX() # (ntarget, 3, 3)
+            term21 = np.einsum("ji,jki->jk", ((B_coil - B_qsc) * dl), dB_by_dX_bs) # (ntarget, 3)
 
-        derivs_axis = np.zeros(0)
-        for ii, x in enumerate(dofs):
-            # sum the two parts of the derivative
-            dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
-            if term2[ii] is not None:
-                dJ_by_dx += term2[ii].detach().numpy()
-            derivs_axis = np.append(derivs_axis, dJ_by_dx)
+            dofs = self.qsc.get_dofs(as_tuple=True)
+            term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
 
-        # make a derivative object
-        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+            derivs_axis = np.zeros(0)
+            for ii, x in enumerate(dofs):
+                # sum the two parts of the derivative
+                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
+                if term2[ii] is not None:
+                    dJ_by_dx += term2[ii].detach().numpy()
+                derivs_axis = np.append(derivs_axis, dJ_by_dx)
+            
+            # make a derivative object
+            dJ_by_daxis = Derivative({self.qsc: derivs_axis})
 
-        dJ = dJ_by_daxis + dJ_by_dbs
+            dJ = dJ_by_daxis + dJ_by_dbs
+        else:
+            dJ = dJ_by_dbs
 
         return dJ
 
@@ -475,30 +481,34 @@ class GradExternalFieldError(Optimizable):
         _, dJ_by_dbs = self.bs.B_and_dB_vjp(v, vterm) # Derivative object
         
         """ Derivative w.r.t. axis coeffs """
-        # this part of the derivative treats B_coil as a constant, independent of the axis
-        loss = torch.clone(self.field_error())
-        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+        # dont compute anything if axis dofs are all fixed
+        if np.any(self.qsc.dofs_free_status):
+            # this part of the derivative treats B_coil as a constant, independent of the axis
+            loss = torch.clone(self.field_error())
+            dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
-        # derivative of B_coil(xyz(axis_coeffs)) term
-        d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
-        term21 = np.einsum("ilj,ijkl->ik", (grad_B_coil - grad_B_qsc) * dl, d2B_by_dXdX_bs) # (ntarget, 3)
-        dofs = self.qsc.get_dofs(as_tuple=True)
-        term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
+            # derivative of B_coil(xyz(axis_coeffs)) term
+            d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
+            term21 = np.einsum("ilj,ijkl->ik", (grad_B_coil - grad_B_qsc) * dl, d2B_by_dXdX_bs) # (ntarget, 3)
+            dofs = self.qsc.get_dofs(as_tuple=True)
+            term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
 
-        derivs_axis = np.zeros(0)
-        for ii, x in enumerate(dofs):
-            # sum the two parts of the derivative
-            dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
+            derivs_axis = np.zeros(0)
+            for ii, x in enumerate(dofs):
+                # sum the two parts of the derivative
+                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
 
-            if term2[ii] is not None:
-                dJ_by_dx += term2[ii].detach().numpy()
-            
-            derivs_axis = np.append(derivs_axis, dJ_by_dx)
+                if term2[ii] is not None:
+                    dJ_by_dx += term2[ii].detach().numpy()
+                
+                derivs_axis = np.append(derivs_axis, dJ_by_dx)
 
-        # make a derivative object
-        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+            # make a derivative object
+            dJ_by_daxis = Derivative({self.qsc: derivs_axis})
 
-        dJ = dJ_by_daxis + dJ_by_dbs
+            dJ = dJ_by_daxis + dJ_by_dbs
+        else:
+            dJ = dJ_by_dbs
 
         return dJ
 
@@ -947,7 +957,7 @@ class AxisArcLengthVariation(Optimizable):
 
 class SurfaceSelfIntersectionPenalty(Optimizable):
 
-    def __init__(self, qsc, r, ntheta=64, tol=1e-2):
+    def __init__(self, qsc, r, ntheta=64, tol=5e-2):
         """Penalty on the self-intersection of flux surfaces.
         Flux surfaces self-intersect when the jacobian of the coordinate
         transformation, sqrtg, becomes singular. This penalty attempts to enforce
@@ -964,7 +974,7 @@ class SurfaceSelfIntersectionPenalty(Optimizable):
             r (float): minor radius of the flux surface to evaluate.
             ntheta (int, optional): Number of theta quadrature points at which to evaluate objective
                 on the flux surface. Defaults to 64.
-            tol (float, optional): tolerance for the jacobian. Defaults to 1e-2.
+            tol (float, optional): tolerance for the jacobian. Defaults to 5e-2.
         """
         self.qsc = qsc
         self.r = r
