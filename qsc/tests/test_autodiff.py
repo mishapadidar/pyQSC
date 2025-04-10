@@ -77,7 +77,6 @@ def test_sigma_iota_derivatives():
     print('dsigma/detabar err', err.item())
     assert err < 1e-5
 
-
 def test_sigma_iota_vac_derivatives():
     """
     Test the accuracy of the derivatives computed in the vacuum part of the solve_state function: 
@@ -268,10 +267,11 @@ def test_r2_derivatives():
     Test the derivatives of the r2 quantities.
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", order='r2')
+    stel = Qsc.from_paper("precise QA", p2 = -1e5, order='r2')
     rc0 = torch.clone(stel.rc).detach()
     zs0 = torch.clone(stel.zs).detach()
     etabar0 = torch.clone(stel.etabar).detach()
+    p20 = torch.clone(stel.p2).detach()
 
     """ Derivatives of X20 """
     loss = torch.mean(stel.X20**2)
@@ -279,6 +279,7 @@ def test_r2_derivatives():
     dloss_by_drc = dloss_by_ddofs[0]
     dloss_by_dzs = dloss_by_ddofs[1]
     dloss_by_detabar = dloss_by_ddofs[4]
+    dloss_by_dp2 = dloss_by_ddofs[7]
 
     # check rc gradient with finite difference
     def fd_obj(x):
@@ -318,16 +319,33 @@ def test_r2_derivatives():
     print('dX20/detabar err', err.item())
     assert err.item() < 1e-4, "dX20/detabar incorrect"
 
+    # check p2 gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.p2.data = p20
+    stel.calculate()
+    def fd_obj(x):
+        stel.p2.data = x
+        stel.calculate()
+        return torch.mean(stel.X20**2).detach()
+    dloss_by_dp2_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.p2.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_dp2 - dloss_by_dp2_fd))
+    print('dX20/dp2 err', err.item())
+    assert err.item() < 1e-4, "dX20/dp2 incorrect"
+
     """ Derivatives of X2c """
     stel.rc.data = rc0
     stel.zs.data = zs0
     stel.etabar.data = etabar0
+    stel.p2.data = p20
     stel.calculate()
     loss = torch.mean(stel.X2c**2)
     dloss_by_ddofs = stel.total_derivative(loss) # list
     dloss_by_drc = dloss_by_ddofs[0]
     dloss_by_dzs = dloss_by_ddofs[1]
     dloss_by_detabar = dloss_by_ddofs[4]
+    dloss_by_dp2 = dloss_by_ddofs[7]
 
     # check rc gradient with finite difference
     stel.rc.data = rc0
@@ -371,16 +389,33 @@ def test_r2_derivatives():
     print('dX2c/detabar err', err.item())
     assert err.item() < 1e-4, "dX2c/detabar incorrect"
 
+    # check p2 gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.p2.data = p20
+    stel.calculate()
+    def fd_obj(x):
+        stel.p2.data = x
+        stel.calculate()
+        return torch.mean(stel.X2c**2).detach()
+    dloss_by_dp2_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.p2.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_dp2 - dloss_by_dp2_fd))
+    print('X2c/dp2 err', err.item())
+    assert err.item() < 1e-4, "X2c/dp2 incorrect"
+
     """ Derivatives of Y2s """
     stel.rc.data = rc0
     stel.zs.data = zs0
     stel.etabar.data = etabar0
+    stel.p2.data = p20
     stel.calculate()
     loss = torch.mean(stel.Y2s**2)
     dloss_by_ddofs = stel.total_derivative(loss) # list
     dloss_by_drc = dloss_by_ddofs[0]
     dloss_by_dzs = dloss_by_ddofs[1]
     dloss_by_detabar = dloss_by_ddofs[4]
+    dloss_by_dp2 = dloss_by_ddofs[7]
 
     # check rc gradient with finite difference
     stel.rc.data = rc0
@@ -424,6 +459,90 @@ def test_r2_derivatives():
     print('dY2s/detabar err', err.item())
     assert err.item() < 1e-4, "dY2s/detabar incorrect"
 
+    # check p2 gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.p2.data = p20
+    stel.calculate()
+    def fd_obj(x):
+        stel.p2.data = x
+        stel.calculate()
+        return torch.mean(stel.Y2s**2).detach()
+    dloss_by_dp2_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.p2.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_dp2 - dloss_by_dp2_fd))
+    print('dY2s/dp2 err', err.item())
+    assert err.item() < 1e-4, "dY2s/dp2 incorrect"
+
+    """ Derivatives of G2 """
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.p2.data = p20
+    stel.calculate()
+    loss = torch.mean(stel.G2**2)
+    dloss_by_ddofs = stel.total_derivative(loss) # list
+    dloss_by_drc = dloss_by_ddofs[0]
+    dloss_by_dzs = dloss_by_ddofs[1]
+    dloss_by_detabar = dloss_by_ddofs[4]
+    dloss_by_dp2 = dloss_by_ddofs[7]
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.rc.data = x
+        stel.calculate()
+        return torch.mean(stel.G2**2).detach()
+    dloss_by_drc_fd = finite_difference(fd_obj, torch.clone(stel.rc.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+    print('dG2/drc err', err.item())
+    assert err.item() < 1e-4, "dG2/drc incorrect"
+
+    # check rc gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.zs.data = x
+        stel.calculate()
+        return torch.mean(stel.G2**2).detach()
+    dloss_by_dzs_fd = finite_difference(fd_obj, torch.clone(stel.zs.detach()), 1e-9)
+    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+    print('dG2/dzs err', err.item())
+    assert err.item() < 1e-4, "dG2/dzs incorrect"
+
+    # check etabar gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.calculate()
+    def fd_obj(x):
+        stel.etabar.data = x
+        stel.calculate()
+        return torch.mean(stel.G2**2).detach()
+    dloss_by_detabar_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_detabar - dloss_by_detabar_fd))
+    print('dG2/detabar err', err.item())
+    assert err.item() < 1e-4, "dG2/detabar incorrect"
+
+    # check p2 gradient with finite difference
+    stel.rc.data = rc0
+    stel.zs.data = zs0
+    stel.etabar.data = etabar0
+    stel.p2.data = p20
+    stel.calculate()
+    def fd_obj(x):
+        stel.p2.data = x
+        stel.calculate()
+        return torch.mean(stel.G2**2).detach()
+    dloss_by_dp2_fd = finite_difference(fd_obj, torch.clone(torch.tensor([stel.p2.detach()])), 1e-6)
+    err = torch.max(torch.abs(dloss_by_dp2 - dloss_by_dp2_fd))
+    print('dG2/dp2 err', err.item())
+    assert err.item() < 1e-4, "dG2/dp2 incorrect"
 
 def test_r2_vac_derivatives():
     """

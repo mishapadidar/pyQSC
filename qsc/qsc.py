@@ -108,7 +108,7 @@ class Qsc(torch.nn.Module):
         self.sigma0 =  sigma0
         self.B0 =  B0
         self.I2 =  I2
-        self.p2 =  p2
+        self.p2 =  torch.nn.Parameter(torch.tensor(p2), requires_grad=True)
         self.sG = sG
         self.spsi = spsi
         self.nphi = nphi
@@ -174,11 +174,11 @@ class Qsc(torch.nn.Module):
         degrees-of-freedom, for simsopt.
         """
         if as_tuple:
-            dofs = (self.rc, self.zs, self.rs, self.zc, self.etabar, self.B2s, self.B2c)
+            dofs = (self.rc, self.zs, self.rs, self.zc, self.etabar, self.B2s, self.B2c, self.p2)
             return dofs
         else:
             dofs = torch.concatenate((self.rc, self.zs, self.rs, self.zc,
-                                      torch.tensor([self.etabar, self.B2s, self.B2c])
+                                      torch.tensor([self.etabar, self.B2s, self.B2c, self.p2])
                                       ))
             return dofs.detach().numpy()
 
@@ -198,7 +198,7 @@ class Qsc(torch.nn.Module):
         # self.sigma0 = x[self.nfourier * 4 + 1]
         self.B2s.data = torch.clone(torch.tensor(x[self.nfourier * 4 + 1])).detach()
         self.B2c.data = torch.clone(torch.tensor(x[self.nfourier * 4 + 2])).detach()
-        # self.p2 = x[self.nfourier * 4 + 4]
+        self.p2.data = torch.clone(torch.tensor(x[self.nfourier * 4 + 3])).detach()
         # self.I2 = x[self.nfourier * 4 + 5]
         # self.B0 = x[self.nfourier * 4 + 6]
 
@@ -215,7 +215,7 @@ class Qsc(torch.nn.Module):
         names += ['rs({})'.format(j) for j in range(self.nfourier)]
         names += ['zc({})'.format(j) for j in range(self.nfourier)]
         # names += ['etabar', 'sigma0', 'B2s', 'B2c', 'p2', 'I2', 'B0']
-        names += ['etabar','B2s', 'B2c']
+        names += ['etabar','B2s', 'B2c', 'p2']
         self.names = names
 
     @classmethod

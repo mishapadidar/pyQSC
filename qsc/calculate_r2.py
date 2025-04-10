@@ -34,7 +34,7 @@ def calculate_r2(self):
     I2 = self.I2
     B2s = torch.clone(self.B2s)
     B2c = torch.clone(self.B2c)
-    p2 = self.p2
+    p2 = torch.clone(self.p2)
     sG = self.sG
     spsi = self.spsi
     I2_over_B0 = self.I2 / self.B0

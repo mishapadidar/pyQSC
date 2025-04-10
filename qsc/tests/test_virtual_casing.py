@@ -248,7 +248,7 @@ def test_B_external_on_axis_split_autodiff():
     dloss_by_drc = dloss_by_ddofs[0]
     dloss_by_dzs = dloss_by_ddofs[1]
     dloss_by_detabar = dloss_by_ddofs[4]
-
+    dloss_by_dp2 = dloss_by_ddofs[7]
 
     # check rc gradient with finite difference
     x0 = torch.clone(stel.rc.detach())
@@ -292,6 +292,20 @@ def test_B_external_on_axis_split_autodiff():
     assert err.item() < 1e-3, f"dloss/detabar finite difference check failed: {err.item()}"
     stel.etabar.data = x0 # restore the original value after finite difference check
 
+    # check p2 gradient with finite difference
+    x0 = torch.clone(torch.tensor([stel.p2.detach()]))
+    def fd_obj(x):
+        stel.p2.data = x
+        stel.calculate()
+        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        loss = torch.mean((B_ext - mean)**2).detach()
+        return loss
+    dloss_by_dp2_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    err = torch.abs(dloss_by_dp2 - dloss_by_dp2_fd)
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/dp2 finite difference check failed: {err.item()}"
+    stel.p2.data = x0 # restore the original value after finite difference check
+
 def test_B_taylor_autodiff():
     """
     Test autodifferentation of B_taylor
@@ -311,6 +325,7 @@ def test_B_taylor_autodiff():
     dloss_by_drc = dloss_by_ddofs[0]
     dloss_by_dzs = dloss_by_ddofs[1]
     dloss_by_detabar = dloss_by_ddofs[4]
+    dloss_by_dp2 = dloss_by_ddofs[7]
 
     # check rc gradient with finite difference
     x0 = torch.clone(stel.rc.detach())
@@ -353,6 +368,20 @@ def test_B_taylor_autodiff():
     print(err.item())
     assert err.item() < 1e-3, f"dloss/detabar finite difference check failed: {err.item()}"
     stel.etabar.data = x0 # restore the original value after finite difference check
+
+    # check p2 gradient with finite difference
+    x0 = torch.clone(torch.tensor([stel.p2.detach()]))
+    def fd_obj(x):
+        stel.p2.data = x
+        stel.calculate()
+        B_taylor = stel.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+        loss = torch.mean((B_taylor - mean)**2).detach()
+        return loss
+    dloss_by_dp2_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    err = torch.abs(dloss_by_dp2 - dloss_by_dp2_fd)
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/dp2 finite difference check failed: {err.item()}"
+    stel.p2.data = x0 # restore the original value after finite difference check
 
 if __name__ == "__main__":
     test_B_external_on_axis()
