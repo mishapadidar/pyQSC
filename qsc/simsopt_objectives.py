@@ -1018,3 +1018,61 @@ class SurfaceSelfIntersectionPenalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dobj()
+    
+class PressurePenalty(Optimizable):
+    def __init__(self, qsc, p2_target=-1e6):
+        """Penalize deviation from a desired pressure profile
+            1/2 * ((p2 - p2_target) / p2_target)^2
+        When using this objective, p2 should be an unfixed degree of freedom.
+
+        Args:
+            qsc (Optimizable, Qsc):
+            p2_target (float): target value of p2. Defaults to -1e6.
+        """
+        self.qsc = qsc
+        self.p2_target = p2_target
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    def obj(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        loss = 0.5 * ((self.qsc.p2 - self.p2_target) / self.p2_target)**2
+        return loss
+    
+    def dobj(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
