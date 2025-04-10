@@ -189,7 +189,8 @@ class Qsc(torch.nn.Module):
         Args:
             x (array): numpy array of dofs.
         """
-        assert len(x) == self.nfourier * 4 + 3
+        self.ndofs = self.nfourier * 4 + 4
+        assert len(x) == self.ndofs
         self.rc.data = torch.clone(torch.tensor(x[self.nfourier * 0 : self.nfourier * 1])).detach()
         self.zs.data = torch.clone(torch.tensor(x[self.nfourier * 1 : self.nfourier * 2])).detach()
         self.rs.data = torch.clone(torch.tensor(x[self.nfourier * 2 : self.nfourier * 3])).detach()
@@ -214,7 +215,6 @@ class Qsc(torch.nn.Module):
         names += ['zs({})'.format(j) for j in range(self.nfourier)]
         names += ['rs({})'.format(j) for j in range(self.nfourier)]
         names += ['zc({})'.format(j) for j in range(self.nfourier)]
-        # names += ['etabar', 'sigma0', 'B2s', 'B2c', 'p2', 'I2', 'B0']
         names += ['etabar','B2s', 'B2c', 'p2']
         self.names = names
 

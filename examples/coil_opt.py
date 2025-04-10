@@ -78,6 +78,8 @@ stel.unfix('etabar')
 for ii in range(1, axis_n_fourier_modes):
     stel.unfix(f'rc({ii})')
     stel.unfix(f'zs({ii})')
+# fix pressure profile
+stel.fix('p2')
 
 # plot the coils and axis
 xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)

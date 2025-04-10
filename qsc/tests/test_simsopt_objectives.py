@@ -201,29 +201,20 @@ def test_ExternalFieldError():
     biot_savart = BiotSavart(coils)
 
     # set up the expansion
-    stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=511)
+    # Make sure self-intersection doesnt exist: otherwise we lose accuracy!
+    r = 0.1
+    p2 = -1e5
+    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1e5, nphi=511)
+    fe = ExternalFieldError(biot_savart, stel, r=0.1, ntheta=256, ntarget=32)
     stel.unfix_all()
 
-    # from simsopt.geo import plot as sms_plot
+    # # Sanity check plot: no self-intersections
     # import matplotlib.pyplot as plt
     # ax = plt.figure().add_subplot(projection='3d')
-    # xyz = stel.XYZ0.detach().numpy() 
-    # ax.plot(xyz[0],xyz[1],xyz[2])
-    # sms_plot(coils, engine="matplotlib", ax=ax, close=True, show=False)
+    # xyz = stel.surface(r=0.1, ntheta=256).detach().numpy() # (nphi, ntheta, 3)
+    # ax.plot_surface(xyz[:,:,0], xyz[:,:,1], xyz[:,:,2], color='lightgray', alpha=0.3)
+    # ax.legend()
     # plt.show()
-
-    fe = ExternalFieldError(biot_savart, stel, r=0.3, ntheta=256, ntarget=32)
-
-    # modify some of the axis parameters
-    fe.fix_all()
-    biot_savart.fix_all()
-    stel.unfix_all()
-    stel.unfix('rc(0)')
-    stel.unfix('rc(1)')
-    x = fe.x
-    x[0] +=0.03
-    x[1] +=0.05
-    fe.x = x
 
     # keep the base point for finite-differences
     fe.unfix_all()
@@ -287,9 +278,8 @@ def test_GradExternalFieldError():
     biot_savart = BiotSavart(coils)
 
     # set up the expansion
-    stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=257)
-
-    fe = GradExternalFieldError(biot_savart, stel, r=0.3, ntheta=256, ntarget=16)
+    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=1e-5, nphi=257)
+    fe = GradExternalFieldError(biot_savart, stel, r=0.1, ntheta=256, ntarget=16)
 
     # keep the base point for finite-differences
     fe.unfix_all()
