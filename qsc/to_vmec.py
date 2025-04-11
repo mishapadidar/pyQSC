@@ -48,7 +48,7 @@ def to_vmec(self, filename, r=0.1, params=dict(), ntheta=20, ntorMax=14):
     phiedge = np.pi * r * r * self.spsi * self.Bbar
 
     # Set pressure Profile
-    temp = - self.p2 * r * r
+    temp = - self.p2.detach().numpy().item() * r * r
     am = [temp,-temp]
     pmass_type='power_series'
     pres_scale=1
