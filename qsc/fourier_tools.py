@@ -121,8 +121,10 @@ def fourier_interp2d_regular_grid(fxy, m_x, m_y):
         Evaluations should be spaced using 
                 X, Y = torch.meshgrid(x, y, indexing='ij')
                 fxy = f(X, Y)
-        m_x (int): Number of points in x dimension
-        m_y (int): Number of points in y dimension
+        m_x (int): Number of points in x dimension. Should be greater than or equal
+            to n_x.
+        m_y (int): Number of points in y dimension. Should be greater than or equal
+            to n_y.
     
     Returns:
         interpolated_signal: (m_x, m_y, d) array of interpolated values
@@ -132,6 +134,9 @@ def fourier_interp2d_regular_grid(fxy, m_x, m_y):
         fxy = fxy[:,:,None]
 
     N, M, d = fxy.shape
+
+    if (m_x < N) or (m_y < M):
+        raise ValueError(f"m_x, m_y must be >= shape(fxy). Interpolate at more points.")
 
     fxy_interp = torch.zeros((m_x, m_y, d))
     for ii in range(d):
