@@ -94,9 +94,9 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, ntheta_eval=32
     gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     for ii in range(self.nfp):
-        g = rotate_nfp(g, ii, self.nfp)
+        g = rotate_nfp(g, 1, self.nfp)
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        nb = rotate_nfp(nb, ii, self.nfp)
+        nb = rotate_nfp(nb, 1, self.nfp)
         n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
 
     # interpolate
@@ -432,9 +432,9 @@ def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, ntheta
     gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     diff = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     for ii in range(self.nfp):
-        g = rotate_nfp(g, ii, self.nfp)
+        g = rotate_nfp(g, 1, self.nfp)
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        d = rotate_nfp(d, ii, self.nfp)
+        d = rotate_nfp(d, 1, self.nfp)
         diff[ii * self.nphi : (ii+1) * self.nphi] = d
 
     # interpolate
@@ -476,9 +476,9 @@ def build_virtual_casing_interpolants_split(self, r=0.1, ntheta=256, nphi=1024, 
     gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     n_cross_B_nonvac = torch.zeros((int(self.nfp * self.nphi), ntheta_eval, 3))
     for ii in range(self.nfp):
-        g = rotate_nfp(g, ii, self.nfp)
+        g = rotate_nfp(g, 1, self.nfp)
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-        nb = rotate_nfp(nb, ii, self.nfp)
+        nb = rotate_nfp(nb, 1, self.nfp)
         n_cross_B_nonvac[ii * self.nphi : (ii+1) * self.nphi] = nb
 
     # interpolate
