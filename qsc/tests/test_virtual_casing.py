@@ -43,6 +43,44 @@ def test_B_external_on_axis():
     plt.tight_layout()
     plt.show()
 
+def test_grad_B_external_on_axis_converges():
+    """
+    Show that the computation of grad_B_external_on_axis converges with nphi
+    We expect spectral convergence. The error may grow with p2.
+    """
+
+    config = "2022 QH nfp3 beta"
+    naxis = 61
+    nphi_list = [256, 512, 1024, 2048]
+    nphi_ref = 2 * nphi_list[-1]
+    mr = 0.13
+    ntheta = 256
+    p2_list = [-1e1, -1e3, -1e5]
+
+
+    for p2 in p2_list:
+        # storage
+        errs = []
+
+        stel = Qsc.from_paper(config, nphi=naxis, p2=p2)
+        gradB_ref = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi_ref, ntheta_eval=ntheta, ntarget=naxis)
+
+        for nphi in nphi_list:
+            with torch.no_grad():
+                gradB_ext_vc = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta, ntarget=naxis)
+
+            err = gradB_ref - gradB_ext_vc
+            errs.append(torch.max(torch.abs(err)).detach().numpy())
+        plt.plot(nphi_list, errs, lw=3, marker='o', label=f'p2=%.2e'%p2)
+
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xlabel('nphi', fontsize=14)
+    plt.ylabel('virtual casing error', fontsize=14)
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+    plt.show()
+
 def test_grad_B_external_on_axis_accuracy():
     """
     Test the accuracy of the surface computation
@@ -84,9 +122,9 @@ def test_grad_B_external_on_axis_consistency():
     Test the accuracy of the surface computation
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", nphi=32, order='r1')
+    stel = Qsc.from_paper("precise QA", nphi=32, order='r3', p2=-1e5)
 
-    minor_radius = 0.2
+    minor_radius = 0.1
     ntheta = 256
     nphi = 2048
     idx_target = range(0, stel.nphi, 64)
@@ -106,7 +144,7 @@ def test_grad_B_external_on_axis_consistency():
     
     grad_Bext_fd = np.zeros(np.shape(grad_Bext_vc))
     for ii, x in enumerate(X_target.detach().numpy()):
-        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-4, ii=ii)[0]
+        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-3, ii=ii)[0]
 
     err = grad_Bext_vc - grad_Bext_fd
     print(np.max(np.abs(err)))
@@ -388,6 +426,7 @@ if __name__ == "__main__":
     test_n_cross_B()
     test_grad_B_external_on_axis_accuracy()
     test_grad_B_external_on_axis_consistency()
+    test_grad_B_external_on_axis_converges()
     test_B_external_on_axis_split()
     test_grad_B_external_on_axis_split()
     test_B_external_on_axis_split_autodiff()
