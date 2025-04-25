@@ -31,13 +31,13 @@ def calculate_r2(self):
     curvature = torch.clone(self.curvature)
     torsion = torch.clone(self.torsion)
     etabar = torch.clone(self.etabar)
-    I2 = self.I2
+    I2 = torch.clone(self.I2)
     B2s = torch.clone(self.B2s)
     B2c = torch.clone(self.B2c)
     p2 = torch.clone(self.p2)
     sG = self.sG
     spsi = self.spsi
-    I2_over_B0 = self.I2 / self.B0
+    I2_over_B0 = I2 / B0
 
     if torch.abs(iota_N) < 1e-8:
         logger.warning('|iota_N| is very small so O(r^2) solve will be poorly conditioned. '

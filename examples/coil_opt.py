@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 from simsopt.geo import plot as sms_plot
 from qsc.simsopt_objectives import (QscOptimizable, FieldError, ExternalFieldError,
                                     IotaPenalty, AxisLengthPenalty, GradExternalFieldError,
-                                    GradBPenalty, GradGradBPenalty, B20Penalty, MagneticWellPenalty)
+                                    GradBPenalty, GradGradBPenalty, B20Penalty, MagneticWellPenalty,
+                                    PressurePenalty)
 
 # configuration parameters
 ncoils = 4
@@ -26,26 +27,25 @@ coil_current = 100000.0
 
 # axis parameters
 order = 'r2'
-axis_n_fourier_modes = 5
+axis_n_fourier_modes = 7
 etabar = 1.0
 axis_nphi = 31
 
 # B_external computation
 minor_radius = 0.1
 ntheta_vc = 64
-nphi_vc = 128
+nphi_vc = 256
 ntarget = axis_nphi
 
 # constraints
-iota_target = 0.103 # target iota
+iota_target = 0.61 # target iota
 coil_length_weight = 1.0 # weight on coil length penalty
-coil_length_target = 4.398 # length of each coil
+coil_length_target = 3.0 # length of each coil
 axis_length_target = 6.28
-coil_curvature_target = 2 * 2 * np.pi / coil_length_target
-well_target = -50
+coil_curvature_target = 5.0
 
 # optimization parameters
-max_iter = 30
+max_iter = 100
 mu_penalty = 1.0
 
 """ initialization """
@@ -79,7 +79,13 @@ xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
 ax = plt.figure().add_subplot(projection='3d')
 ax.plot(xyz0[0], xyz0[1], xyz0[2])
 sms_plot(coils, engine="matplotlib", ax=ax, close=True, show=False)
+surface = stel.surface(r=minor_radius, ntheta=ntheta_vc).detach().numpy()
+ax.plot_surface(surface[:,:,0], surface[:,:,1], surface[:,:,2], alpha=0.3, color='lightgray')
+ax.set_xlim(-1.2, 1.2)
+ax.set_ylim(-1.2, 1.2)
+ax.set_zlim(-1.2, 1.2)
 plt.show()
+
 
 """ set up the optimization problem """
 
@@ -96,65 +102,128 @@ coil_lengths_penalties = [(1 / coil_length_target**2) * QuadraticPenalty(CurveLe
 coil_curvature_penalties = [(1 / coil_curvature_target**2) * LpCurveCurvature(c, 2, threshold=coil_curvature_target) for c in base_curves]
 axis_length_penalty = AxisLengthPenalty(stel, axis_length_target)
 gradb_penalty = GradBPenalty(stel)
-well_penalty = MagneticWellPenalty(stel, well_target=well_target)
+gradgradb_penalty = GradGradBPenalty(stel)
+p2_penalty = PressurePenalty(stel, -1e6)
 
 # form an Optimizable objective
-constraint_violation = (iota_penalty + sum(coil_lengths_penalties) + axis_length_penalty + sum(coil_curvature_penalties))
-prob = (fe + ge 
-        + mu_penalty * constraint_violation
-        + gradb_penalty)
+prob = (fe 
+        + ge
+        + mu_penalty * iota_penalty 
+        + mu_penalty * sum(coil_lengths_penalties) 
+        # + mu_penalty * axis_length_penalty
+        + mu_penalty * sum(coil_curvature_penalties)
+        + 0.1 * gradb_penalty
+        + 0.01 * gradgradb_penalty
+        )
 def fun(dofs):
     prob.x = dofs
     return prob.J(), prob.dJ()
 
+
 """ solve the optimization problem """
 
 print("\nInitial results")
-print('total field error', fe.J())
+print('field error', fe.J())
+print('grad field error', ge.J())
 print('iota', stel.iota)
 print('axis length', stel.axis_length)
 coil_lengths = [CurveLength(c).J() for c in base_curves]
 print('coil length min, max', np.min(coil_lengths), np.max(coil_lengths))
 
 def callback(intermediate_result):
-    print(intermediate_result.fun)
+    print("J = ", intermediate_result.fun)
 
-t0 = time.time()
-# res = minimize(fun, x0=prob.x, jac=True, method="L-BFGS-B", options={"maxiter":max_iter, "iprint":5})
-res = minimize(fun, x0=prob.x, jac=True, method="BFGS", callback=callback, 
+x0 = prob.x
+res = minimize(fun, x0=x0, jac=True, method="BFGS", callback=callback, 
                   options={"maxiter":max_iter, "gtol":1e-8})
-t1 = time.time()
-print("\nIteration time:", (t1-t0)/max_iter)
-
-
 prob.x = res.x
 
 # evaluate the solution
 xopt = prob.x
 print("\nOptimized results")
 print('total field error', fe.J())
+print('grad field error', ge.J())
 print('iota', stel.iota)
 print('axis length', stel.axis_length)
 coil_lengths = [CurveLength(c).J() for c in base_curves]
 print('coil length min, max', np.min(coil_lengths), np.max(coil_lengths))
 
 
-""" save results """
-
-outdir = "./output"
-outfilename = outdir + "/coil_opt_data.pickle"
-print("\nSaving data to:", outfilename)
-os.makedirs(outdir, exist_ok=True)
-prob.unfix_all()
-data = {'axis': stel.x, 'bs':biot_savart.x}
-pickle.dump(data, open(outfilename,"wb"))
-
-# get axis shape
+# plot the coils and axis
 xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
 ax = plt.figure().add_subplot(projection='3d')
 ax.plot(xyz0[0], xyz0[1], xyz0[2])
 sms_plot(coils, engine="matplotlib", ax=ax, close=True, show=False)
-outfilename = outdir+"/plot.pdf"
-print("Saving plot to:", outfilename)
-plt.savefig(fname=outfilename, format='pdf')
-# plt.show()
+surface = stel.surface(r=minor_radius, ntheta=ntheta_vc).detach().numpy()
+ax.plot_surface(surface[:,:,0], surface[:,:,1], surface[:,:,2], alpha=0.3, color='lightgray')
+ax.set_xlim(-1.2, 1.2)
+ax.set_ylim(-1.2, 1.2)
+ax.set_zlim(-1.2, 1.2)
+plt.show()
+
+
+""" Now that we have a good warm start, optimize with pressure"""
+
+max_iter = 50
+stel.unfix('B2c')
+stel.unfix('I2')
+stel.unfix('p2')
+
+# form an Optimizable objective
+prob = (fe 
+        + ge 
+        + mu_penalty * iota_penalty 
+        + mu_penalty * sum(coil_lengths_penalties) 
+        + mu_penalty * axis_length_penalty
+        + mu_penalty * sum(coil_curvature_penalties)
+        + 0.1 * gradb_penalty
+        + 0.01 * gradgradb_penalty
+        + p2_penalty
+        )
+def fun(dofs):
+    prob.x = from_unit_scale(dofs)
+    grad = chain_rule(prob.dJ())
+    return prob.J(), grad
+def to_unit_scale(dofs):
+    """scale p2 to [0,1]"""
+    dofs[-2] = dofs[-2] / 1e6
+    return dofs
+def from_unit_scale(dofs):
+    """scale p2 to [0,1e6]"""
+    dofs[-2] = dofs[-2] * 1e6
+    return dofs
+def chain_rule(J):
+    """compute gradient with respect to unit scale variables"""
+    J[-2] = J[-2] * 1e6
+    return J
+
+x0 = to_unit_scale(prob.x)
+res = minimize(fun, x0=x0, jac=True, method="BFGS", callback=callback, 
+                  options={"maxiter":max_iter, "gtol":1e-8})
+
+prob.x = from_unit_scale(res.x)
+
+# evaluate the solution
+print("\nOptimized results")
+print('total field error', fe.J())
+print('grad field error', ge.J())
+print('iota', stel.iota)
+print('pressure', stel.p2)
+print('current', stel.I2)
+print('axis length', stel.axis_length)
+coil_lengths = [CurveLength(c).J() for c in base_curves]
+print('coil length min, max', np.min(coil_lengths), np.max(coil_lengths))
+print(stel.rc)
+print(stel.zs)
+
+# plot the coils and axis
+xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
+ax = plt.figure().add_subplot(projection='3d')
+ax.plot(xyz0[0], xyz0[1], xyz0[2])
+sms_plot(coils, engine="matplotlib", ax=ax, close=True, show=False)
+surface = stel.surface(r=minor_radius, ntheta=ntheta_vc).detach().numpy()
+ax.plot_surface(surface[:,:,0], surface[:,:,1], surface[:,:,2], alpha=0.3, color='lightgray')
+ax.set_xlim(-1.2, 1.2)
+ax.set_ylim(-1.2, 1.2)
+ax.set_zlim(-1.2, 1.2)
+plt.show()

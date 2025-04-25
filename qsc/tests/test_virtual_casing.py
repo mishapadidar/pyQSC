@@ -56,13 +56,13 @@ def test_grad_B_external_on_axis_converges():
     mr = 0.13
     ntheta = 256
     p2_list = [-1e1, -1e3, -1e5]
-
+    I2 = -0.2
 
     for p2 in p2_list:
         # storage
         errs = []
 
-        stel = Qsc.from_paper(config, nphi=naxis, p2=p2)
+        stel = Qsc.from_paper(config, nphi=naxis, p2=p2, I2=I2)
         gradB_ref = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi_ref, ntheta_eval=ntheta, ntarget=naxis)
 
         for nphi in nphi_list:
@@ -287,6 +287,7 @@ def test_B_external_on_axis_split_autodiff():
     dloss_by_dzs = dloss_by_ddofs[1]
     dloss_by_detabar = dloss_by_ddofs[4]
     dloss_by_dp2 = dloss_by_ddofs[7]
+    dloss_by_dI2 = dloss_by_ddofs[8]
 
     # check rc gradient with finite difference
     x0 = torch.clone(stel.rc.detach())
@@ -343,6 +344,21 @@ def test_B_external_on_axis_split_autodiff():
     print(err.item())
     assert err.item() < 1e-3, f"dloss/dp2 finite difference check failed: {err.item()}"
     stel.p2.data = x0 # restore the original value after finite difference check
+
+    # check I2 gradient with finite difference
+    x0 = torch.clone(torch.tensor([stel.I2.detach()]))
+    def fd_obj(x):
+        stel.I2.data = x
+        stel.calculate()
+        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        loss = torch.mean((B_ext - mean)**2).detach()
+        return loss
+    dloss_by_dI2_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    err = torch.abs(dloss_by_dI2 - dloss_by_dI2_fd)
+    print(err.item())
+    assert err.item() < 1e-3, f"dloss/dI2 finite difference check failed: {err.item()}"
+    stel.I2.data = x0 # restore the original value after finite difference check
+
 
 def test_B_taylor_autodiff():
     """

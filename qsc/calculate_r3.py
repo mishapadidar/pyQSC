@@ -28,7 +28,7 @@ def calculate_r3(self):
     N_helicity = torch.clone(self.iota - self.iotaN)
     B0 = self.B0
     G0 = torch.clone(self.G0)
-    I2 = self.I2
+    I2 = torch.clone(self.I2)
     X1c = torch.clone(self.X1c)
     Y1c = torch.clone(self.Y1c)
     Y1s = torch.clone(self.Y1s)
