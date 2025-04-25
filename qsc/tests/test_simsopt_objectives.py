@@ -5,7 +5,7 @@ import numpy as np
 from simsopt.geo import create_equally_spaced_curves
 from simsopt.field import Current, coils_via_symmetries, BiotSavart
 from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
-                                    IotaPenalty, AxisLengthPenalty, LGradB, B20Penalty, MagneticWellPenalty,
+                                    IotaPenalty, AxisLengthPenalty, GradBPenalty, GradGradBPenalty, B20Penalty, MagneticWellPenalty,
                                     GradFieldError, AxisArcLengthVariation, SurfaceSelfIntersectionPenalty,
                                     PressurePenalty)
 from scipy.optimize import approx_fprime
@@ -362,10 +362,10 @@ def test_AxisLengthPenalty():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
-def test_LGradB():
+def test_GradBPenalty():
     # set up the expansion
-    stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=99)
-    ip = LGradB(stel)
+    stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r2', nphi=99)
+    ip = GradBPenalty(stel)
     stel.unfix_all()
     ip.unfix_all()
     x0 = ip.x
@@ -380,11 +380,44 @@ def test_LGradB():
     dfe_by_dqsc_fd = finite_difference(fun, x0, 1e-7)
     err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
     print(err)
-    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+    assert err < 1e-5, "FAIL: GradBPenalty derivatives are incorrect"
+
+def test_GradGradBPenalty():
+    # set up the expansion
+    stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r2', nphi=131)
+    ip = GradGradBPenalty(stel)
+    stel.unfix_all()
+    ip.unfix_all()
+    x0 = ip.x
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ()
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(x):
+        stel.x = x
+        return ip.J()
+
+    """ do a taylor test"""
+    
+
+    # compute central difference derivative
+    h_values = [1e-7 / (2**i) for i in range(5)]
+    errors = []
+    for h in h_values:
+        dfe_by_dqsc_fd = finite_difference(fun, x0, h)
+        err = np.max(np.abs(dfe_by_dqsc_fd - dJ_by_dqsc))
+        errors.append(err)
+
+    # error should be quadratic for central difference
+    log_errors = np.log(errors)
+    log_h = np.log(h_values)
+    slope = np.polyfit(log_h, log_errors, 1)[0]
+    assert np.abs(slope - 2) < 1e-3, "FAIL: GradGradBPenalty derivatives are incorrect"
 
 def test_B20Penalty():
     # set up the expansion
-    stel = QscOptimizable.from_paper("precise QA", order='r2', nphi=99)
+    stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r2', nphi=99)
     ip = B20Penalty(stel)
     stel.unfix_all()
     ip.unfix_all()
@@ -490,7 +523,8 @@ if __name__ == "__main__":
     test_GradExternalFieldError()
     test_IotaPenalty()
     test_AxisLengthPenalty()
-    test_LGradB()
+    test_GradBPenalty()
+    test_GradGradBPenalty()
     test_B20Penalty()
     test_MagneticWellPenalty()
     test_AxisArcLengthVariationPenalty()

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from simsopt.geo import plot as sms_plot
 from qsc.simsopt_objectives import (QscOptimizable, FieldError, GradFieldError,
                                     IotaPenalty, AxisLengthPenalty,
-                                    LGradB, B20Penalty, MagneticWellPenalty)
+                                    GradBPenalty, B20Penalty, MagneticWellPenalty)
 
 # configuration parameters
 ncoils = 4
@@ -93,12 +93,12 @@ iota_penalty = IotaPenalty(stel, iota_target)
 coil_lengths_penalties = [(1 / coil_length_target**2) * QuadraticPenalty(CurveLength(c), coil_length_target, "identity") for c in base_curves]
 coil_curvature_penalties = [(1 / coil_curvature_target**2) * LpCurveCurvature(c, 2, threshold=coil_curvature_target) for c in base_curves]
 axis_length_penalty = AxisLengthPenalty(stel, axis_length_target)
-lgradb_penalty = LGradB(stel)
+gradb_penalty = GradBPenalty(stel)
 well_penalty = MagneticWellPenalty(stel, well_target=well_target)
 
 # form an Optimizable objective
 constraint_violation = (iota_penalty + sum(coil_lengths_penalties) + axis_length_penalty + sum(coil_curvature_penalties))
-optional_penalties = lgradb_penalty + well_penalty
+optional_penalties = gradb_penalty + well_penalty
 prob = fe + ge + mu_penalty * constraint_violation #+ mu_penalty * optional_penalties 
 def fun(dofs):
     prob.x = dofs

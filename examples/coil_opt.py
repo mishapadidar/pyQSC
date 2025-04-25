@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from simsopt.geo import plot as sms_plot
 from qsc.simsopt_objectives import (QscOptimizable, FieldError, ExternalFieldError,
                                     IotaPenalty, AxisLengthPenalty, GradExternalFieldError,
-                                    LGradB, B20Penalty, MagneticWellPenalty)
+                                    GradBPenalty, GradGradBPenalty, B20Penalty, MagneticWellPenalty)
 
 # configuration parameters
 ncoils = 4
@@ -32,8 +32,8 @@ axis_nphi = 31
 
 # B_external computation
 minor_radius = 0.1
-ntheta_vc = 256
-nphi_vc = 1024
+ntheta_vc = 64
+nphi_vc = 128
 ntarget = axis_nphi
 
 # constraints
@@ -67,19 +67,12 @@ zs[1] = 1e-4
 
 stel = QscOptimizable(rc=rc, zs=zs, etabar=etabar, order=order, nphi=axis_nphi, nfp=nfp)
 
-# optional warm start: first order solution
-data = pickle.load(open("./output/coil_opt_data.pickle","rb"))
-stel.x = data['axis']
-biot_savart.x = data['bs']
-
 # choose degrees of freedom
 stel.fix_all()
 stel.unfix('etabar')
 for ii in range(1, axis_n_fourier_modes):
     stel.unfix(f'rc({ii})')
     stel.unfix(f'zs({ii})')
-# fix pressure profile
-stel.fix('p2')
 
 # plot the coils and axis
 xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
@@ -102,17 +95,17 @@ iota_penalty = IotaPenalty(stel, iota_target)
 coil_lengths_penalties = [(1 / coil_length_target**2) * QuadraticPenalty(CurveLength(c), coil_length_target, "identity") for c in base_curves]
 coil_curvature_penalties = [(1 / coil_curvature_target**2) * LpCurveCurvature(c, 2, threshold=coil_curvature_target) for c in base_curves]
 axis_length_penalty = AxisLengthPenalty(stel, axis_length_target)
-lgradb_penalty = LGradB(stel)
+gradb_penalty = GradBPenalty(stel)
 well_penalty = MagneticWellPenalty(stel, well_target=well_target)
 
 # form an Optimizable objective
 constraint_violation = (iota_penalty + sum(coil_lengths_penalties) + axis_length_penalty + sum(coil_curvature_penalties))
-optional_penalties = lgradb_penalty + well_penalty
-prob = fe + ge + mu_penalty * constraint_violation #+ mu_penalty * b20_penalty + mu_penalty * optional_penalties 
+prob = (fe + ge 
+        + mu_penalty * constraint_violation
+        + gradb_penalty)
 def fun(dofs):
     prob.x = dofs
     return prob.J(), prob.dJ()
-
 
 """ solve the optimization problem """
 
@@ -132,6 +125,7 @@ res = minimize(fun, x0=prob.x, jac=True, method="BFGS", callback=callback,
                   options={"maxiter":max_iter, "gtol":1e-8})
 t1 = time.time()
 print("\nIteration time:", (t1-t0)/max_iter)
+
 
 prob.x = res.x
 
