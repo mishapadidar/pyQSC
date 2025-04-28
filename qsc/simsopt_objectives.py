@@ -1157,3 +1157,132 @@ class PressurePenalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dobj()
+
+
+class CurveAxisDistancePenalty(Optimizable):
+    def __init__(self, curve, qsc, minimum_distance):
+        """
+        A penalty function that penalizes the distance between a Simsopt Curve and the axis.
+        This is useful for keeping coils far away from the axis. This can be used in place
+        of a coil plasma distance penalty.
+
+        curve (Curve): A Simsopt Curve object
+        qsc (QscOptimizable): a QscOptimizable object
+        """
+        self.curve = curve
+        self.qsc = qsc
+        self.minimum_distance = minimum_distance
+        Optimizable.__init__(self, depends_on=[curve, qsc])
+
+    def shortest_distance(self):
+        """Compute the shortest distance between the curve and the axis.
+
+        Returns:
+            tensor: float tensor with the shortest distance.
+        """
+        # get axis and curve positions
+        xyz_axis = self.qsc.XYZ0.T # (nphi, 3)
+        xyz_curve = torch.tensor(self.curve.gamma()) # (ncurve, 3)
+
+        # compute pairwise distances
+        dist = torch.linalg.norm(xyz_axis[:, None, :] - xyz_curve[None, :, :], dim=-1) # (nphi, ncurve)
+        return torch.min(dist)
+    
+    def obj(self):
+        """
+        Compute the penalty function.
+            J = int_{curve} int_{axis} 0.5 * max(0, d_min - ||r(c) - s(l)||)^2 dl dc
+        where
+            r(c) is the position vector of the curve,
+            s(l) is the position vector of the axis,
+            d_min is the minimum distance tolerance between the curve and the axis.
+        """
+        # get axis and curve positions
+        xyz_axis = self.qsc.XYZ0.T # (nphi, 3)
+        xyz_curve = torch.tensor(self.curve.gamma()) # (ncurve, 3)
+
+        # compute pairwise distances
+        dist = torch.linalg.norm(xyz_curve[None, :, :] - xyz_axis[:, None, :], dim=-1) # (nphi, ncurve)
+        integrand = 0.5 * torch.maximum(self.minimum_distance - dist, torch.tensor(0))**2
+
+        # line elements
+        dphi = torch.diff(self.qsc.phi)[0]
+        d_l_d_phi = self.qsc.d_l_d_phi
+        dl_axis = d_l_d_phi * dphi # (nphi,)
+        dphi_curve = np.diff(self.curve.quadpoints)[0]
+        d_l_d_phi_curve = np.linalg.norm(self.curve.gammadash(), axis=-1) # (ncurve,)
+        dl_curve = torch.tensor(d_l_d_phi_curve * dphi_curve) # (ncurve,)
+
+        # integrate
+        J = torch.sum(integrand * dl_axis[:, None] * dl_curve[None, :])
+        return J
+
+    def dobj(self):
+        """
+        Derivative of obj w.r.t all coil dofs and axis dofs.
+
+        return: SIMSOPT Derivative object containing the derivatives
+            of the .obj function with respect to the curve
+            and qsc DOFs.
+        """
+        # get axis and curve positions
+        xyz_axis = self.qsc.XYZ0.T.detach().numpy() # (nphi, 3)
+        xyz_curve = self.curve.gamma() # (ncurve, 3)
+
+        # compute pairwise distances
+        diff = xyz_curve[None, :, :] - xyz_axis[:, None, :] # (nphi, ncurve, 3)
+        dist = np.linalg.norm(diff, axis=-1) # (nphi, ncurve)
+        integrand = 0.5 * np.maximum(self.minimum_distance - dist, 0.0)**2
+
+        # line elements
+        dphi = np.diff(self.qsc.phi.detach().numpy())[0]
+        d_l_d_phi = self.qsc.d_l_d_phi.detach().numpy() # (nphi,)
+        dl_axis = (d_l_d_phi * dphi)[:, None] # (nphi,1)
+        dphi_curve = np.diff(self.curve.quadpoints)[0]
+        d_l_d_phi_curve = np.linalg.norm(self.curve.gammadash(), axis=-1) # (ncurve,)
+        dl_curve = (d_l_d_phi_curve * dphi_curve)[:, None] # (ncurve,1)
+
+        # derivative of the integrand wrt curve dofs
+        inner = - (np.maximum(self.minimum_distance - dist, 0.0) * dl_axis / dist)[:,:,None] * diff
+        dintegrand_by_dcurve = np.sum(inner, axis=0) # (ncurve, 3)
+        dintegrand_by_dcurve = self.curve.dgamma_by_dcoeff_vjp(dintegrand_by_dcurve * dl_curve)
+
+        # derivative of the arc length wrt curve dofs
+        inner = np.sum(integrand * dl_axis * dphi_curve, axis=0) # (ncurve,)
+        dl_by_dcurve_term = self.curve.dincremental_arclength_by_dcoeff_vjp(inner)
+
+        # Derivative object
+        dJ_by_dcurve = dintegrand_by_dcurve + dl_by_dcurve_term
+
+        """ Derivative w.r.t. axis dofs """
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        # make a derivative object
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+
+        dJ = dJ_by_daxis + dJ_by_dcurve
+
+        return dJ
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()

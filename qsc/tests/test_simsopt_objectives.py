@@ -7,8 +7,7 @@ from simsopt.field import Current, coils_via_symmetries, BiotSavart
 from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
                                     IotaPenalty, AxisLengthPenalty, GradBPenalty, GradGradBPenalty, B20Penalty, MagneticWellPenalty,
                                     GradFieldError, AxisArcLengthVariation, SurfaceSelfIntersectionPenalty,
-                                    PressurePenalty)
-from scipy.optimize import approx_fprime
+                                    PressurePenalty, CurveAxisDistancePenalty)
 from qsc.util import finite_difference
 
 def test_FieldError():
@@ -516,6 +515,105 @@ def test_PressurePenalty():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
+def test_CurveAxisDistancePenalty():
+
+    """
+    The the CurveAxisDistancePenalty class.
+    """
+
+    # configuration parameters
+    ncoils = 2
+    nfp = 2
+    is_stellsym = True
+    coil_major_radius = 1.0
+    coil_minor_radius = 0.2
+    coil_n_fourier_modes = 3
+    coil_current = 100000.0 
+
+    # initialize coils
+    base_curves = create_equally_spaced_curves(ncoils, nfp, stellsym=is_stellsym, R0=coil_major_radius,
+                                            R1=coil_minor_radius, order=coil_n_fourier_modes)
+
+    # set up the expansion
+    stel = QscOptimizable.from_paper("precise QA", order='r2')
+
+    curve = base_curves[0]
+    dmin = 0.3
+    fe = CurveAxisDistancePenalty(curve, stel, minimum_distance=dmin)
+
+    # modify some of the axis parameters
+    fe.fix_all()
+    stel.unfix_all()
+    stel.unfix('rc(0)')
+    stel.unfix('rc(1)')
+    x = fe.x
+    x[0] +=0.01
+    x[1] +=0.01
+    fe.x = x
+
+    # modify some curve parameters
+    curve.unfix_all()
+    x = curve.x
+    x[1] += 0.01
+    x[2] += 0.01
+    x[3] += 0.5
+    curve.x = x
+
+    # from simsopt.geo import plot as sms_plot
+    # import matplotlib.pyplot as plt
+    # ax = plt.figure().add_subplot(projection='3d')
+    # xyz = stel.XYZ0.detach().numpy() 
+    # ax.plot(xyz[0],xyz[1],xyz[2])
+    # sms_plot(base_curves, engine="matplotlib", ax=ax, close=True, show=False)
+    # plt.show()
+
+    # keep the base point for finite-differences
+    fe.unfix_all()
+    x0 = fe.x
+
+    # compute derivatives
+    fe.unfix_all()
+    partials = fe.dobj()
+    dfe_by_dbs = partials(curve)
+    dfe_by_dqsc = partials(stel)
+
+    # check derivative w.r.t. coil dofs w/ finite difference
+    fe.unfix_all()
+    fe.x = x0
+    fe.fix_all()
+    curve.unfix_all()
+    x = curve.x
+    def fun(x):
+        curve.x = x
+        return fe.obj().detach().numpy()
+    # dfe_by_dbs_fd = approx_fprime(x, fun, epsilon=1e-1)
+    dfe_by_dbs_fd = finite_difference(fun, x, 1e-3)
+    err = np.max(np.abs(dfe_by_dbs_fd - dfe_by_dbs))
+    assert err < 1e-5, "FAIL: coil derivatives of CurveAxisDistancePenalty are incorrect"
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    fe.unfix_all()
+    fe.x = x0
+    fe.fix_all()
+    stel.unfix_all()
+    x = stel.x
+    def fun(x):
+        stel.x = x
+        return fe.obj().detach().numpy()
+    dfe_by_dqsc_fd = finite_difference(fun, x, 1e-3)
+    err = np.max(np.abs(dfe_by_dqsc_fd - dfe_by_dqsc))
+    assert err < 1e-5, "FAIL: qsc derivatives of CurveAxisDistancePenalty are incorrect"
+
+    # make sure shortest distance is calculated correctly
+    from simsopt.geo import CurveXYZFourier
+    curve = CurveXYZFourier(32, 1)
+    curve.x = np.array([0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.53, 0.0, 0.0])
+    rc = np.array([1.0, 0.0, 0.0])
+    zs = np.array([0.0, 0.0, 0.0])
+    stel = QscOptimizable(rc=rc, zs=zs, nphi=32)
+    fe = CurveAxisDistancePenalty(curve, stel, minimum_distance=0.1)
+    assert np.abs(fe.shortest_distance().detach().numpy().item() - 0.53) < 1e-14, "FAIL: distance calculation is incorrect"
+
 if __name__ == "__main__":
     test_FieldError()
     test_GradFieldError()
@@ -530,3 +628,4 @@ if __name__ == "__main__":
     test_AxisArcLengthVariationPenalty()
     test_SurfaceSelfIntersectionPenalty()
     test_PressurePenalty()
+    test_CurveAxisDistancePenalty()
