@@ -14,7 +14,7 @@ def test_B_external_on_axis():
     """ plot error against minor radius"""
     mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
     ntheta = 256
-    nphi = 4096
+    nphi = 8192
     n_target = 32
     # storage 
     errs = []
@@ -23,8 +23,8 @@ def test_B_external_on_axis():
         idx_target = range(0, stel.nphi, n_target)
         X_target = stel.XYZ0[:,idx_target].T
         with torch.no_grad():
-            Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
-            # Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+            # Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+            Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
         Bext = stel.Bfield_cartesian()[:,idx_target] # (3, nphi)
         err = Bext - Bext_vc
         errs.append(torch.max(torch.abs(err)).detach().numpy())
@@ -462,12 +462,12 @@ def test_div_and_curl():
 
 if __name__ == "__main__":
     test_B_external_on_axis()
-    # test_n_cross_B()
-    # test_grad_B_external_on_axis_accuracy()
-    # test_grad_B_external_on_axis_consistency()
-    # test_grad_B_external_on_axis_converges()
-    # test_B_external_on_axis_split()
-    # test_grad_B_external_on_axis_split()
-    # test_B_external_on_axis_split_autodiff()
-    # test_B_taylor_autodiff()
-    # test_div_and_curl()
+    test_n_cross_B()
+    test_grad_B_external_on_axis_accuracy()
+    test_grad_B_external_on_axis_consistency()
+    test_grad_B_external_on_axis_converges()
+    test_B_external_on_axis_split()
+    test_grad_B_external_on_axis_split()
+    test_B_external_on_axis_split_autodiff()
+    test_B_taylor_autodiff()
+    test_div_and_curl()
