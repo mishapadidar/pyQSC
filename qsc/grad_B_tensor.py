@@ -2524,8 +2524,129 @@ def grad_B_tensor_cartesian(self, vacuum_component=False):
 
     return grad_B_vector_cartesian
 
+# def grad_grad_B_tensor_cylindrical(self, vacuum_component=False):
+#     '''
+#     Function to calculate the gradient of of the gradient the magnetic field
+#     vector B=(B_R,B_phi,B_Z) at every point along the axis (hence with nphi points)
+#     where R, phi and Z are the standard cylindrical coordinates.
+
+#     Args:
+#         vacuum_component (bool, optional): If true, only compute the vacuum component of the
+#             field. Defaults to False.
+#     '''
+#     if vacuum_component:
+#         return torch.permute(self.grad_grad_B_vac,(1,2,3,0))
+#     else:
+#         return torch.permute(self.grad_grad_B,(1,2,3,0))
+
+# def grad_grad_B_tensor_cartesian(self, vacuum_component=False):
+#      '''
+#      Function to calculate the gradient of of the gradient the magnetic field
+#      vector B=(B_x,B_y,B_z) at every point along the axis (hence with nphi points)
+#      where x, y and z are the standard cartesian coordinates.
+
+#     Args:
+#         vacuum_component (bool, optional): If true, only compute the vacuum component of the
+#             field. Defaults to False.
+#      '''
+#      nablanablaB = self.grad_grad_B_tensor_cylindrical(vacuum_component=vacuum_component)
+#      cosphi = torch.cos(self.phi)
+#      sinphi = torch.sin(self.phi)
+
+#      grad_grad_B_vector_cartesian = torch.zeros((3,3,3,self.nphi))
+#      grad_grad_B_vector_cartesian[0,0,0] = (cosphi**3*nablanablaB[0, 0, 0] - cosphi**2*sinphi*(nablanablaB[0, 0, 1] + 
+#       nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0]) + cosphi*sinphi**2*(nablanablaB[0, 1, 1] + nablanablaB[1, 0, 1] + 
+#       nablanablaB[1, 1, 0]) - sinphi**3*nablanablaB[1, 1, 1])
+
+#      grad_grad_B_vector_cartesian[0,0,1] = (cosphi**3*nablanablaB[0, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[0, 1, 1] - nablanablaB[1, 0, 1]) + sinphi**3*nablanablaB[1, 1, 0] - 
+#       cosphi*sinphi**2*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - nablanablaB[1, 1, 1])) 
+     
+#      grad_grad_B_vector_cartesian[0,0,2] = (cosphi**2*nablanablaB[0, 0, 2] 
+#                                             - cosphi*sinphi*(nablanablaB[0, 1, 2] + nablanablaB[1, 0, 2]) + 
+#                                             sinphi**2*nablanablaB[1, 1, 2])
+     
+#      grad_grad_B_vector_cartesian[0,1,0] = (cosphi**3*nablanablaB[0, 1, 0] + 
+#     sinphi**3*nablanablaB[1, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) - 
+#     cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]))
+
+#      grad_grad_B_vector_cartesian[0,1,1] = (cosphi**3*nablanablaB[0, 1, 1] - 
+#     sinphi**3*nablanablaB[1, 0, 0] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[1, 0, 1] - nablanablaB[1, 1, 0]) + 
+#     cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] - 
+#       nablanablaB[1, 1, 1]))
+
+#      grad_grad_B_vector_cartesian[0,1,2] = (cosphi**2*nablanablaB[0, 1, 2] - 
+#     sinphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
+#       nablanablaB[1, 1, 2]))
+
+#      grad_grad_B_vector_cartesian[0,2,0] = (cosphi**2*nablanablaB[0, 2, 0] - 
+#     cosphi*sinphi*(nablanablaB[0, 2, 1] + nablanablaB[1, 2, 0]) + 
+#     sinphi**2*nablanablaB[1, 2, 1])
+
+#      grad_grad_B_vector_cartesian[0,2,1] = (cosphi**2*nablanablaB[0, 2, 1] - 
+#     sinphi**2*nablanablaB[1, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 0] - 
+#       nablanablaB[1, 2, 1]))
+
+#      grad_grad_B_vector_cartesian[0,2,2] = (cosphi*nablanablaB[0, 2, 2] - sinphi*nablanablaB[1, 2, 2])
+
+#      grad_grad_B_vector_cartesian[1,0,0] = (sinphi**3*nablanablaB[0, 1, 1] + cosphi**3*nablanablaB[1, 0, 0] + 
+#     cosphi**2*sinphi*(nablanablaB[0, 0, 0] - nablanablaB[1, 0, 1] - 
+#       nablanablaB[1, 1, 0]) - cosphi*sinphi**2*(nablanablaB[0, 0, 1] + 
+#       nablanablaB[0, 1, 0] - nablanablaB[1, 1, 1]))
+
+#      grad_grad_B_vector_cartesian[1,0,1] = (-(sinphi**3*nablanablaB[0, 1, 0]) + 
+#     cosphi**3*nablanablaB[1, 0, 1] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
+#       nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) + 
+#     cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]))
+
+#      grad_grad_B_vector_cartesian[1,0,2] = (-(sinphi**2*nablanablaB[0, 1, 2]) + 
+#     cosphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
+#       nablanablaB[1, 1, 2]))
+
+#      grad_grad_B_vector_cartesian[1,1,0] = (-(sinphi**3*nablanablaB[0, 0, 1]) + 
+#     cosphi*sinphi**2*(nablanablaB[0, 0, 0] - nablanablaB[0, 1, 1] - 
+#       nablanablaB[1, 0, 1]) + cosphi**3*nablanablaB[1, 1, 0] + 
+#     cosphi**2*sinphi*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - 
+#       nablanablaB[1, 1, 1]))
+
+#      grad_grad_B_vector_cartesian[1,1,1] = (sinphi**3*nablanablaB[0, 0, 0] + 
+#     cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] + 
+#       nablanablaB[1, 0, 0]) + cosphi**2*sinphi*(nablanablaB[0, 1, 1] + 
+#       nablanablaB[1, 0, 1] + nablanablaB[1, 1, 0]) + cosphi**3*nablanablaB[1, 1, 1])
+
+#      grad_grad_B_vector_cartesian[1,1,2] = (sinphi**2*nablanablaB[0, 0, 2] + cosphi*sinphi*(nablanablaB[0, 1, 2] + 
+#       nablanablaB[1, 0, 2]) + cosphi**2*nablanablaB[1, 1, 2])
+
+#      grad_grad_B_vector_cartesian[1,2,0] = (-(sinphi**2*nablanablaB[0, 2, 1]) + cosphi**2*nablanablaB[1, 2, 0] + 
+#     cosphi*sinphi*(nablanablaB[0, 2, 0] - nablanablaB[1, 2, 1]))
+
+#      grad_grad_B_vector_cartesian[1,2,1] = (sinphi**2*nablanablaB[0, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 1] + 
+#       nablanablaB[1, 2, 0]) + cosphi**2*nablanablaB[1, 2, 1])
+
+#      grad_grad_B_vector_cartesian[1,2,2] = (sinphi*nablanablaB[0, 2, 2] + cosphi*nablanablaB[1, 2, 2])
+
+#      grad_grad_B_vector_cartesian[2,0,0] = (cosphi**2*nablanablaB[2, 0, 0] - cosphi*sinphi*(nablanablaB[2, 0, 1] + 
+#       nablanablaB[2, 1, 0]) + sinphi**2*nablanablaB[2, 1, 1])
+#      grad_grad_B_vector_cartesian[2,0,1] = (cosphi**2*nablanablaB[2, 0, 1] - sinphi**2*nablanablaB[2, 1, 0] + 
+#     cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]))
+#      grad_grad_B_vector_cartesian[2,0,2] = (cosphi*nablanablaB[2, 0, 2] - sinphi*nablanablaB[2, 1, 2])
+#      grad_grad_B_vector_cartesian[2,1,0] = (-(sinphi**2*nablanablaB[2, 0, 1]) + cosphi**2*nablanablaB[2, 1, 0] + 
+#     cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]))
+#      grad_grad_B_vector_cartesian[2,1,1] = (sinphi**2*nablanablaB[2, 0, 0] + cosphi*sinphi*(nablanablaB[2, 0, 1] + 
+#       nablanablaB[2, 1, 0]) + cosphi**2*nablanablaB[2, 1, 1])
+#      grad_grad_B_vector_cartesian[2,1,2] = (sinphi*nablanablaB[2, 0, 2] + cosphi*nablanablaB[2, 1, 2])
+#      grad_grad_B_vector_cartesian[2,2,0] = cosphi*nablanablaB[2, 2, 0] - sinphi*nablanablaB[2, 2, 1]
+#      grad_grad_B_vector_cartesian[2,2,1] = sinphi*nablanablaB[2, 2, 0] + cosphi*nablanablaB[2, 2, 1]
+#      grad_grad_B_vector_cartesian[2,2,2] = nablanablaB[2, 2, 2]
+     
+#      return grad_grad_B_vector_cartesian
+
 def grad_grad_B_tensor_cylindrical(self, vacuum_component=False):
-    '''
+    """
     Function to calculate the gradient of of the gradient the magnetic field
     vector B=(B_R,B_phi,B_Z) at every point along the axis (hence with nphi points)
     where R, phi and Z are the standard cylindrical coordinates.
@@ -2533,114 +2654,58 @@ def grad_grad_B_tensor_cylindrical(self, vacuum_component=False):
     Args:
         vacuum_component (bool, optional): If true, only compute the vacuum component of the
             field. Defaults to False.
-    '''
+    """
     if vacuum_component:
-        return torch.permute(self.grad_grad_B_vac,(1,2,3,0))
+        grad_grad_B = self.grad_grad_B_vac
     else:
-        return torch.permute(self.grad_grad_B,(1,2,3,0))
+        grad_grad_B = self.grad_grad_B
+    grad_grad_B = torch.permute(grad_grad_B, (1, 2, 3, 0))
+    t = self.tangent_cylindrical # (nphi, 3)
+    n = self.normal_cylindrical
+    b = self.binormal_cylindrical
+    E = torch.stack([n, b, t], axis=0)
+    # grad_grad_B = self.grad_grad_B.transpose(1, 2, 3, 0)
+    grad_grad_B_tensor_cylindrical = torch.einsum('ijkq,iqa,jqb,kqc->abcq', grad_grad_B, E, E, E)
+    return grad_grad_B_tensor_cylindrical
 
 def grad_grad_B_tensor_cartesian(self, vacuum_component=False):
-     '''
-     Function to calculate the gradient of of the gradient the magnetic field
-     vector B=(B_x,B_y,B_z) at every point along the axis (hence with nphi points)
-     where x, y and z are the standard cartesian coordinates.
+    """
+    Transform the second derivative tensor of the magnetic field from cylindrical to Cartesian coordinates.
+    Shape: (nphi, 3, 3, 3)
 
     Args:
         vacuum_component (bool, optional): If true, only compute the vacuum component of the
             field. Defaults to False.
-     '''
-     nablanablaB = self.grad_grad_B_tensor_cylindrical(vacuum_component=vacuum_component)
-     cosphi = torch.cos(self.phi)
-     sinphi = torch.sin(self.phi)
+    """
+    grad_grad_B_cyl = self.grad_grad_B_tensor_cylindrical(vacuum_component=vacuum_component)
+    grad_grad_B_cyl = torch.permute(grad_grad_B_cyl, (3, 0, 1, 2))  # shape (nphi, 3, 3, 3)
+    cosphi = torch.cos(self.phi)
+    sinphi = torch.sin(self.phi)
 
-     grad_grad_B_vector_cartesian = torch.zeros((3,3,3,self.nphi))
-     grad_grad_B_vector_cartesian[0,0,0] = (cosphi**3*nablanablaB[0, 0, 0] - cosphi**2*sinphi*(nablanablaB[0, 0, 1] + 
-      nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0]) + cosphi*sinphi**2*(nablanablaB[0, 1, 1] + nablanablaB[1, 0, 1] + 
-      nablanablaB[1, 1, 0]) - sinphi**3*nablanablaB[1, 1, 1])
+    # Rotation matrix R from cylindrical (R, φ, Z) to Cartesian (x, y, z)
+    R = torch.zeros((3, 3, self.nphi))# shape (3, 3, nphi)
+    R[0, 0] = cosphi
+    R[0, 1] = -sinphi
+    R[1, 0] = sinphi
+    R[1, 1] = cosphi
+    R[2, 2] = 1
 
-     grad_grad_B_vector_cartesian[0,0,1] = (cosphi**3*nablanablaB[0, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
-      nablanablaB[0, 1, 1] - nablanablaB[1, 0, 1]) + sinphi**3*nablanablaB[1, 1, 0] - 
-      cosphi*sinphi**2*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - nablanablaB[1, 1, 1])) 
-     
-     grad_grad_B_vector_cartesian[0,0,2] = (cosphi**2*nablanablaB[0, 0, 2] 
-                                            - cosphi*sinphi*(nablanablaB[0, 1, 2] + nablanablaB[1, 0, 2]) + 
-                                            sinphi**2*nablanablaB[1, 1, 2])
-     
-     grad_grad_B_vector_cartesian[0,1,0] = (cosphi**3*nablanablaB[0, 1, 0] + 
-    sinphi**3*nablanablaB[1, 0, 1] + cosphi**2*sinphi*(nablanablaB[0, 0, 0] - 
-      nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) - 
-    cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]))
+    # R = np.array([
+    #     [cosphi, -sinphi, torch.zeros(self.nphi)],
+    #     [sinphi,  cosphi, torch.zeros(self.nphi)],
+    #     [torch.zeros(self.nphi), torch.zeros(self.nphi), torch.ones(self.nphi)],
+    # ])  # shape (3, 3, nphi)
+    # quit()
 
-     grad_grad_B_vector_cartesian[0,1,1] = (cosphi**3*nablanablaB[0, 1, 1] - 
-    sinphi**3*nablanablaB[1, 0, 0] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
-      nablanablaB[1, 0, 1] - nablanablaB[1, 1, 0]) + 
-    cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] - 
-      nablanablaB[1, 1, 1]))
+    # Transpose to shape (nphi, 3, 3)
+    # R = np.transpose(R, (2, 0, 1))
+    R = torch.permute(R, (2, 0, 1))
 
-     grad_grad_B_vector_cartesian[0,1,2] = (cosphi**2*nablanablaB[0, 1, 2] - 
-    sinphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
-      nablanablaB[1, 1, 2]))
 
-     grad_grad_B_vector_cartesian[0,2,0] = (cosphi**2*nablanablaB[0, 2, 0] - 
-    cosphi*sinphi*(nablanablaB[0, 2, 1] + nablanablaB[1, 2, 0]) + 
-    sinphi**2*nablanablaB[1, 2, 1])
+    # Apply tensor transformation: R[i,a] * R[j,b] * R[k,c] * T[a,b,c]
+    T_cartesian = torch.einsum('pia,pjb,pkc,pabc->pijk',
+                            R, R, R, grad_grad_B_cyl)
 
-     grad_grad_B_vector_cartesian[0,2,1] = (cosphi**2*nablanablaB[0, 2, 1] - 
-    sinphi**2*nablanablaB[1, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 0] - 
-      nablanablaB[1, 2, 1]))
-
-     grad_grad_B_vector_cartesian[0,2,2] = (cosphi*nablanablaB[0, 2, 2] - sinphi*nablanablaB[1, 2, 2])
-
-     grad_grad_B_vector_cartesian[1,0,0] = (sinphi**3*nablanablaB[0, 1, 1] + cosphi**3*nablanablaB[1, 0, 0] + 
-    cosphi**2*sinphi*(nablanablaB[0, 0, 0] - nablanablaB[1, 0, 1] - 
-      nablanablaB[1, 1, 0]) - cosphi*sinphi**2*(nablanablaB[0, 0, 1] + 
-      nablanablaB[0, 1, 0] - nablanablaB[1, 1, 1]))
-
-     grad_grad_B_vector_cartesian[1,0,1] = (-(sinphi**3*nablanablaB[0, 1, 0]) + 
-    cosphi**3*nablanablaB[1, 0, 1] + cosphi*sinphi**2*(nablanablaB[0, 0, 0] - 
-      nablanablaB[0, 1, 1] - nablanablaB[1, 1, 0]) + 
-    cosphi**2*sinphi*(nablanablaB[0, 0, 1] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]))
-
-     grad_grad_B_vector_cartesian[1,0,2] = (-(sinphi**2*nablanablaB[0, 1, 2]) + 
-    cosphi**2*nablanablaB[1, 0, 2] + cosphi*sinphi*(nablanablaB[0, 0, 2] - 
-      nablanablaB[1, 1, 2]))
-
-     grad_grad_B_vector_cartesian[1,1,0] = (-(sinphi**3*nablanablaB[0, 0, 1]) + 
-    cosphi*sinphi**2*(nablanablaB[0, 0, 0] - nablanablaB[0, 1, 1] - 
-      nablanablaB[1, 0, 1]) + cosphi**3*nablanablaB[1, 1, 0] + 
-    cosphi**2*sinphi*(nablanablaB[0, 1, 0] + nablanablaB[1, 0, 0] - 
-      nablanablaB[1, 1, 1]))
-
-     grad_grad_B_vector_cartesian[1,1,1] = (sinphi**3*nablanablaB[0, 0, 0] + 
-    cosphi*sinphi**2*(nablanablaB[0, 0, 1] + nablanablaB[0, 1, 0] + 
-      nablanablaB[1, 0, 0]) + cosphi**2*sinphi*(nablanablaB[0, 1, 1] + 
-      nablanablaB[1, 0, 1] + nablanablaB[1, 1, 0]) + cosphi**3*nablanablaB[1, 1, 1])
-
-     grad_grad_B_vector_cartesian[1,1,2] = (sinphi**2*nablanablaB[0, 0, 2] + cosphi*sinphi*(nablanablaB[0, 1, 2] + 
-      nablanablaB[1, 0, 2]) + cosphi**2*nablanablaB[1, 1, 2])
-
-     grad_grad_B_vector_cartesian[1,2,0] = (-(sinphi**2*nablanablaB[0, 2, 1]) + cosphi**2*nablanablaB[1, 2, 0] + 
-    cosphi*sinphi*(nablanablaB[0, 2, 0] - nablanablaB[1, 2, 1]))
-
-     grad_grad_B_vector_cartesian[1,2,1] = (sinphi**2*nablanablaB[0, 2, 0] + cosphi*sinphi*(nablanablaB[0, 2, 1] + 
-      nablanablaB[1, 2, 0]) + cosphi**2*nablanablaB[1, 2, 1])
-
-     grad_grad_B_vector_cartesian[1,2,2] = (sinphi*nablanablaB[0, 2, 2] + cosphi*nablanablaB[1, 2, 2])
-
-     grad_grad_B_vector_cartesian[2,0,0] = (cosphi**2*nablanablaB[2, 0, 0] - cosphi*sinphi*(nablanablaB[2, 0, 1] + 
-      nablanablaB[2, 1, 0]) + sinphi**2*nablanablaB[2, 1, 1])
-     grad_grad_B_vector_cartesian[2,0,1] = (cosphi**2*nablanablaB[2, 0, 1] - sinphi**2*nablanablaB[2, 1, 0] + 
-    cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]))
-     grad_grad_B_vector_cartesian[2,0,2] = (cosphi*nablanablaB[2, 0, 2] - sinphi*nablanablaB[2, 1, 2])
-     grad_grad_B_vector_cartesian[2,1,0] = (-(sinphi**2*nablanablaB[2, 0, 1]) + cosphi**2*nablanablaB[2, 1, 0] + 
-    cosphi*sinphi*(nablanablaB[2, 0, 0] - nablanablaB[2, 1, 1]))
-     grad_grad_B_vector_cartesian[2,1,1] = (sinphi**2*nablanablaB[2, 0, 0] + cosphi*sinphi*(nablanablaB[2, 0, 1] + 
-      nablanablaB[2, 1, 0]) + cosphi**2*nablanablaB[2, 1, 1])
-     grad_grad_B_vector_cartesian[2,1,2] = (sinphi*nablanablaB[2, 0, 2] + cosphi*nablanablaB[2, 1, 2])
-     grad_grad_B_vector_cartesian[2,2,0] = cosphi*nablanablaB[2, 2, 0] - sinphi*nablanablaB[2, 2, 1]
-     grad_grad_B_vector_cartesian[2,2,1] = sinphi*nablanablaB[2, 2, 0] + cosphi*nablanablaB[2, 2, 1]
-     grad_grad_B_vector_cartesian[2,2,2] = nablanablaB[2, 2, 2]
-     
-     return grad_grad_B_vector_cartesian
+    # return T_cartesian.transpose(1,2,3,0)  # shape (nphi, 3, 3, 3)
+    T_cartesian =  torch.permute(T_cartesian, (1,2,3,0))  # shape (nphi, 3, 3, 3)
+    return T_cartesian
