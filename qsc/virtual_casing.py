@@ -15,6 +15,100 @@ from .fourier_tools import fourier_interp2d_regular_grid
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def divergence_taylor(self, r, ntheta=64, vacuum_component=False):
+    """Compute the divergence of the Taylor expansion of B on a flux surface.
+    
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        vacuum_component (bool, optional): If true, only compute the divergence of the vacuum component of the
+            field. Defaults to False.
+
+    Returns:
+        (tensor): (nphi, ntheta) tensor of evaluations of the divergence of B.
+    """
+    # [i, j, k]; i indexes Cartesian dofs; j indexes B; k indexes axis
+    gradB = self.grad_B_tensor_cartesian(vacuum_component=vacuum_component) # (3, 3, nphi)
+
+    # divergence of first order expansion
+    divB = gradB.diagonal(offset=0, dim1=0, dim2=1).sum(dim=-1) # (nphi,)
+    divB = torch.tile(divB, (ntheta,1)).T # (nphi, ntheta)
+
+    if self.order != 'r1':
+        # [i, j, k, l]; k indexes B, (i,j) are Cartesian dofs; l indexes axis.
+        grad2B = self.grad_grad_B_tensor_cartesian(vacuum_component=vacuum_component) # (3, 3, 3, nphi)
+
+        # compute flux surface
+        gamma_axis = torch.clone(self.XYZ0.T) # (nphi, 3)
+        gamma_surf = self.surface(r, ntheta=ntheta) # (nphi, ntheta, 3)
+        delta_r = gamma_surf - gamma_axis.reshape((-1,1,3)) # (nphi, ntheta, 3)
+        
+        for ll in range(self.nphi):
+            # compute divB
+            Aii = (grad2B[:,0,0,ll] + grad2B[:,1,1,ll] + grad2B[:,2,2,ll]) # (3,)          
+            divB[ll] += torch.matmul(delta_r[ll], Aii) # (ntheta,)
+
+    return divB
+
+
+def curl_taylor(self, r, ntheta=64, vacuum_component=False):
+    """Compute the curl of the Taylor expansion of B on a flux surface.
+    
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+        vacuum_component (bool, optional): If true, only compute the curl of the vacuum component of the
+            field. Defaults to False.
+
+    Returns:
+        (tensor): (nphi, ntheta, 3) tensor of evaluations of the curl of B.
+    """
+    # [i, j, k]; i indexes Cartesian dofs; j indexes B; k indexes axis
+    gradB = self.grad_B_tensor_cartesian(vacuum_component=vacuum_component) # (3, 3, nphi)
+
+    # storage
+    curlB = torch.zeros((self.nphi, ntheta, 3)) # (nphi, ntheta, 3)
+
+    # curl of first order expansion
+    A32 = gradB[1, 2, :] # (nphi,)
+    A23 = gradB[2, 1, :] # (nphi,)
+    A13 = gradB[2, 0, :] # (nphi,)
+    A31 = gradB[0, 2, :] # (nphi,)
+    A21 = gradB[0, 1, :] # (nphi,)
+    A12 = gradB[1, 0, :] # (nphi,)
+    curlB[:, :, 0] = (A32 - A23)[:, None]
+    curlB[:, :, 1] = (A13 - A31)[:, None]
+    curlB[:, :, 2] = (A21 - A12)[:, None]
+
+    if self.order != 'r1':
+        # [i, j, k, l]; k indexes B, (i,j) are Cartesian dofs; l indexes axis.
+        grad2B = self.grad_grad_B_tensor_cartesian(vacuum_component=vacuum_component) # (3, 3, 3, nphi)
+
+        # compute flux surface
+        gamma_axis = torch.clone(self.XYZ0.T) # (nphi, 3)
+        gamma_surf = self.surface(r, ntheta=ntheta) # (nphi, ntheta, 3)
+        delta_r = gamma_surf - gamma_axis.reshape((-1,1,3)) # (nphi, ntheta, 3)
+        
+        for ll in range(self.nphi):
+            
+            # compute curlB
+            A32 = grad2B[:, 1, 2, ll] # (3,)
+            A23 = grad2B[:, 2, 1, ll] # (3,)
+            A13 = grad2B[:, 2, 0, ll] # (3,)
+            A31 = grad2B[:, 0, 2, ll] # (3,)
+            A21 = grad2B[:, 0, 1, ll] # (3,)
+            A12 = grad2B[:, 1, 0, ll] # (3,)
+            grad2B_antisymmetric = torch.zeros((3, 3)) # (3, 3)
+            grad2B_antisymmetric[0] = A32 - A23
+            grad2B_antisymmetric[1] = A13 - A31
+            grad2B_antisymmetric[2] = A21 - A12
+            
+            # curl of the second order expansion
+            curlB[ll] += torch.matmul(grad2B_antisymmetric, delta_r[ll].T).T # (ntheta, 3)
+
+    return curlB
+
+
 def B_taylor(self, r, ntheta=64, vacuum_component=False):
     """Calculate the magnetic field on a flux surface of radius r using
     the Taylor expansion of B.

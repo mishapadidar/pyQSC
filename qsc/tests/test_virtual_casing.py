@@ -34,7 +34,11 @@ def test_B_external_on_axis():
     a = errs[-1] / (mr_list[-1] **2)
     x = np.linspace(mr_list[0], mr_list[-1], 30)
     y = a * x**2
-    plt.plot(x, y, lw=3, linestyle='--', label='theoretical')
+    plt.plot(x, y, lw=3, linestyle='--', label='theoretical $O(r^2)$')
+    a = errs[-1] / (mr_list[-1] **3)
+    x = np.linspace(mr_list[0], mr_list[-1], 30)
+    y = a * x**3
+    plt.plot(x, y, lw=3, linestyle='--', label='theoretical $O(r^3)$')
     plt.yscale('log')
     plt.xscale('log')
     plt.xlabel('minor radius', fontsize=14)
@@ -437,13 +441,33 @@ def test_B_taylor_autodiff():
     assert err.item() < 1e-3, f"dloss/dp2 finite difference check failed: {err.item()}"
     stel.p2.data = x0 # restore the original value after finite difference check
 
+def test_div_and_curl():
+    """ Test that the divergence and curl are zero of the Taylor field are zero."""
+    stel = Qsc.from_paper("precise QA", I2=0.0, p2=0.0, order='r2', nphi=301)
+
+    r = 0.1
+    ntheta = 121
+
+    curl = stel.curl_taylor(r, ntheta=ntheta, vacuum_component=True) 
+    err = torch.max(torch.norm(curl, dim=2)) # (nphi, ntheta)
+    print(err)
+    assert err < 1e-10, f"curl is nonzero: {err.item()}"
+
+    # divergence
+    div = stel.divergence_taylor(r, ntheta=ntheta, vacuum_component=True)
+    err = torch.max(torch.abs(div))
+    print(err) # (nphi, ntheta)
+    assert err < 1e-9, f"div is nonzero: {err.item()}"
+
+
 if __name__ == "__main__":
     test_B_external_on_axis()
-    test_n_cross_B()
-    test_grad_B_external_on_axis_accuracy()
-    test_grad_B_external_on_axis_consistency()
-    test_grad_B_external_on_axis_converges()
-    test_B_external_on_axis_split()
-    test_grad_B_external_on_axis_split()
-    test_B_external_on_axis_split_autodiff()
-    test_B_taylor_autodiff()
+    # test_n_cross_B()
+    # test_grad_B_external_on_axis_accuracy()
+    # test_grad_B_external_on_axis_consistency()
+    # test_grad_B_external_on_axis_converges()
+    # test_B_external_on_axis_split()
+    # test_grad_B_external_on_axis_split()
+    # test_B_external_on_axis_split_autodiff()
+    # test_B_taylor_autodiff()
+    # test_div_and_curl()
