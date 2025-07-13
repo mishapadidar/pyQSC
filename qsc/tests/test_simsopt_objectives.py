@@ -10,6 +10,28 @@ from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldErr
                                     PressurePenalty, CurveAxisDistancePenalty)
 from qsc.util import finite_difference
 
+def test_save_load():
+    """Test saving and loading a QscOptimizable object with Simsopt."""
+    from simsopt._core import save, load
+
+    # stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=71, sG=-1, spsi=-1, B0 = 2)
+    stel = QscOptimizable(rc = [1.0, 0.0, 0.1], zs=[0.0, 0.0], zc=[0.0, 0.0, 1e-4], p2=1e4, I2=1e-7, 
+                          B2c=1e-6, B2s=1e-4, order='r1', nphi=71, sG=-1, spsi=-1, B0 = 2)
+
+    stel.unfix_all()
+    stel.save("savetest.json")
+    stel2 = load("savetest.json")
+
+    assert np.allclose(stel.x - stel2.x, 0.0, atol=1e-15), "loaded dofs do not match saved"
+    assert stel.nfp == stel2.nfp, "loaded nfp do not match saved value"
+    assert stel.B0 == stel2.B0, "loaded B0 do not match saved value"
+    assert stel.sigma0 == stel2.sigma0, "loaded sigma0 do not match saved value"
+    assert stel.sG == stel2.sG, "loaded sG do not match saved value"
+    assert stel.spsi == stel2.spsi, "loaded spsi do not match saved value"
+    assert stel.nphi == stel2.nphi, "loaded nphi do not match saved value"
+    assert stel.order == stel2.order, "loaded order do not match saved value"
+
+
 def test_FieldError():
     """
     The the FieldError class.
@@ -615,6 +637,7 @@ def test_CurveAxisDistancePenalty():
     assert np.abs(fe.shortest_distance().detach().numpy().item() - 0.53) < 1e-14, "FAIL: distance calculation is incorrect"
 
 if __name__ == "__main__":
+    test_save_load()
     test_FieldError()
     test_GradFieldError()
     test_ExternalFieldError()

@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from simsopt._core import Optimizable
 from simsopt._core.derivative import Derivative, derivative_dec
+from simsopt._core.json import GSONDecoder
 from qsc import Qsc
 
 #logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,62 @@ class QscOptimizable(Qsc, Optimizable):
         """
         self.need_to_run_code = True
         return super().recompute_bell(parent)
+    
+    def as_dict(self, serial_objs_dict=None) -> dict:
+        """Used by the simsopt save to save a QscOptimizable object.
+        Args:
+            serial_objs_dict: dictionary, used by the :obj:`GSONDecoder` recursive routine to save simsopt objects.
+
+        Returns:
+            dict: containing the information needed to serialize the object.
+        """
+        d = super().as_dict(serial_objs_dict=serial_objs_dict)
+
+        # add the non-DOF attributes needed to initialize a QSC object.
+        d["nfp"] = self.nfp
+        d["sigma0"] = self.sigma0
+        d["B0"] = self.B0
+        d["sG"] = self.sG
+        d["spsi"] = self.spsi
+        d["nphi"] = self.nphi
+        d["order"] = self.order
+        return d
+    
+    @classmethod
+    def from_dict(cls, d, serial_objs_dict, recon_objs):
+        """Used by the json decoder to load a QscOptimizable object
+        
+        Args:
+            d (dict): Contains the dofs and other class attributes needed for initialization.
+            serial_objs_dict: dictionary, used by the :obj:`GSONDecoder` recursive routine to load simsopt objects.
+            recon_objs: dictionary, used by the :obj:`GSONDecoder` recursive routine to load simsopt objects.
+        
+        Returns:
+            An instance of the QscOptimizable class, as described by the dictionary d
+        """
+        decoder = GSONDecoder()
+
+        # get the dofs
+        dofs = d.pop('dofs')
+        dofs =  decoder.process_decoded(dofs, serial_objs_dict, recon_objs)
+        x = dofs._x
+        names = dofs._names
+        rc = [x[ii] for ii, nn in enumerate(names) if 'rc' in nn]
+        rs = [x[ii] for ii, nn in enumerate(names) if 'rs' in nn]
+        zc = [x[ii] for ii, nn in enumerate(names) if 'zc' in nn]
+        zs = [x[ii] for ii, nn in enumerate(names) if 'zs' in nn]
+        etabar = x[ names.index('etabar')]
+        I2 =  x[ names.index('I2')]
+        p2 =  x[ names.index('p2')]
+        B2s =  x[ names.index('B2s')]
+        B2c =  x[ names.index('B2c')]
+
+        # initialize the class
+        out = cls(rc = rc, rs=rs, zc = zc, zs=zs, etabar = etabar, 
+                  I2 = I2, p2 = p2, B2s = B2s, B2c = B2c, 
+                  **d)
+
+        return out
 
 
 class FieldError(Optimizable):
