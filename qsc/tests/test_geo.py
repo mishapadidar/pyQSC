@@ -78,6 +78,23 @@ def test_surface_tangents():
     print(err)
     assert err < 1e-4, "dsurface_by_dvarphi incorrect"
 
+def test_second_derivative():
+    """ Test the accuracy of the second derivative of the surface."""
+    # set up the expansion
+    stel = Qsc.from_paper("precise QA", nphi=513, order='r3')
+
+    minor_radius = 0.1
+    ntheta = 512
+    dxyz_by_dtheta = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+    d2xyz_by_dthetatheta = stel.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
+
+    # test dsurface_by_dtheta with central differences
+    dtheta = 2 * np.pi / ntheta
+    dxyz_by_dtheta_fd = (dxyz_by_dtheta[:,2:,:] - dxyz_by_dtheta[:,:-2,:]) / (2 * dtheta)
+    err = np.max(np.abs(d2xyz_by_dthetatheta[:,1:-1,:] - dxyz_by_dtheta_fd))
+    print(err)
+    assert err < 1e-4, "d2surface_by_dthetatheta incorrect"
+
 def test_surface_nonvac():
     """
     Test the accuracy of the nonvacuum surface computation
@@ -197,6 +214,7 @@ def test_normal_autodiff():
 if __name__ == "__main__":
     test_surface()
     test_surface_tangents()
+    test_second_derivative()
     test_surface_nonvac()
     test_surface_autodiff()
     test_normal_autodiff()
