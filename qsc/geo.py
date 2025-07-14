@@ -406,3 +406,25 @@ def jacobian(self, r, ntheta=64):
     dsurface_by_dr = self.dsurface_by_dr(r, ntheta=ntheta) # (nphi, ntheta, 3)
     jacobian_det = torch.sum(dsurface_by_dr * normal, axis=-1) # (nphi, ntheta)
     return jacobian_det
+
+def surface_theta_curvature(self, r, ntheta=64):
+    """Compute the curvature of a flux surface, with radius r, in the theta direction,
+        kappa = || dsurface/dtheta x d^2surface/(dtheta^2)|| / ||dsurface/dtheta||^3.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+            The number of phi quadpoints is inherited from the class's nphi
+            attribute.
+
+    Returns:
+        tensor: (nphi, ntheta) tensor of curvature values.
+    """
+    
+    d1 = self.dsurface_by_dtheta(r, ntheta=ntheta) # (nphi, ntheta, 3)
+    d2 = self.d2surface_by_dthetatheta(r, ntheta=ntheta) # (nphi, ntheta, 3)
+    cross = torch.linalg.cross(d1, d2, dim=-1) # (nphi, ntheta, 3)
+    numerator = torch.linalg.norm(cross, dim=-1) # (nphi, ntheta)
+    denominator = torch.linalg.norm(d1, dim=-1)**3 # (nphi, ntheta)
+    curvature = numerator / denominator # (nphi, ntheta)
+    return curvature

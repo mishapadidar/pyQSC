@@ -34,7 +34,8 @@ class Qsc(torch.nn.Module):
     from .calculate_r2 import calculate_r2, calculate_r2_vac
     from .calculate_r3 import calculate_r3, calculate_shear
     from .geo import (surface, dsurface_by_dvarphi, dsurface_by_dtheta,
-                      dsurface_by_dr, surface_normal, jacobian, d2surface_by_dthetatheta)
+                      dsurface_by_dr, surface_normal, jacobian, d2surface_by_dthetatheta,
+                      surface_theta_curvature)
     from .mercier import mercier
     from .r_singularity import calculate_r_singularity
     from .plot import plot, plot_boundary, get_boundary, B_fieldline, B_contour, plot_axis, flux_tube
