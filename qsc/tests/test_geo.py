@@ -232,6 +232,28 @@ def test_surface_area():
         assert abs(area - area_actual) < 1e-15, f"Surface area incorrect: {area}"
         mock_method.assert_called_once()
 
+def test_surface_curvature():
+    """ Test surface curvature computation """
+
+    # test the curvature of elliptic flux surfaces
+    stel = Qsc.from_paper("2022 QH nfp3 beta", order='r1')
+    r = 0.1
+    ntheta = 32
+    curvature = stel.surface_theta_curvature(r=r, ntheta=ntheta).detach().numpy() # (nphi, ntheta)
+    theta = np.linspace(0, 2*np.pi, ntheta, endpoint=False)[:, None]
+    theta = torch.tensor(theta)
+
+    # calculate the curvature of the ellipse analytically
+    numerator = torch.abs(stel.X1c_untwisted * stel.Y1s_untwisted 
+                          - stel.X1s_untwisted * stel.Y1c_untwisted
+                          ) 
+    denominator = r * torch.sqrt((stel.X1s_untwisted * torch.cos(theta) - stel.X1c_untwisted * torch.sin(theta))**2 + (stel.Y1s_untwisted * torch.cos(theta) - stel.Y1c_untwisted * torch.sin(theta))**2)**3
+    curvature_actual =  numerator / denominator
+    # relative err
+    rel_err = np.abs(curvature - curvature_actual.T.detach().numpy()) / np.abs(curvature_actual.T.detach().numpy())
+    err = np.max(rel_err)
+    assert err < 1e-14, f"Surface curvature incorrect: {err}"
+
 
 if __name__ == "__main__":
     test_surface()
@@ -241,3 +263,4 @@ if __name__ == "__main__":
     test_surface_autodiff()
     test_normal_autodiff()
     test_surface_area()
+    test_surface_curvature()
