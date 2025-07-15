@@ -7,7 +7,7 @@ from simsopt.field import Current, coils_via_symmetries, BiotSavart
 from qsc.simsopt_objectives import (FieldError, QscOptimizable, ExternalFieldError, GradExternalFieldError,
                                     IotaPenalty, AxisLengthPenalty, GradBPenalty, GradGradBPenalty, B20Penalty, MagneticWellPenalty,
                                     GradFieldError, AxisArcLengthVariation, SurfaceSelfIntersectionPenalty,
-                                    PressurePenalty, CurveAxisDistancePenalty)
+                                    PressurePenalty, CurveAxisDistancePenalty, ThetaCurvaturePenalty)
 from qsc.util import finite_difference
 
 def test_save_load():
@@ -31,6 +31,24 @@ def test_save_load():
     assert stel.nphi == stel2.nphi, "loaded nphi do not match saved value"
     assert stel.order == stel2.order, "loaded order do not match saved value"
 
+def test_get_scale():
+    """ Test the get_scale() method of QscOptimizable."""
+
+    # default case
+    stel = QscOptimizable(rc=[1, 0], zs=[0, 0], order='r1', nphi=17)
+    scale = stel.get_scale()
+    scale_actual = np.array([1, np.exp(-1), 1, np.exp(-1),1, np.exp(-1), 1, np.exp(-1), 1, 1, 1, 1, 1])
+    print(scale - scale_actual)
+    np.testing.assert_allclose(scale, scale_actual, rtol=1e-15, atol=1e-15)
+
+    # case with specified scales and fixed dofs
+    stel = QscOptimizable(rc=[1, 0], zs=[0, 0], order='r1', nphi=17)
+    stel.fix('rc(0)')
+    stel.fix('etabar')
+    scale = stel.get_scale(**{'p2':5.0, 'zs(1)':7.0})
+    scale_actual = np.array([np.exp(-1), 1, 7.0, 1, np.exp(-1), 1, np.exp(-1), 1, 1, 5.0, 1])
+    print(scale - scale_actual)
+    np.testing.assert_allclose(scale, scale_actual, rtol=1e-15, atol=1e-15)
 
 def test_FieldError():
     """
@@ -636,8 +654,47 @@ def test_CurveAxisDistancePenalty():
     fe = CurveAxisDistancePenalty(curve, stel, minimum_distance=0.1)
     assert np.abs(fe.shortest_distance().detach().numpy().item() - 0.53) < 1e-14, "FAIL: distance calculation is incorrect"
 
+def test_ThetaCurvaturePenalty():
+    """ Test the ThetaCurvaturePenalty class"""
+
+    # # test the objective value for elliptic cross sections
+    # minor_radius = 0.1
+    # ntheta = 32
+    # stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r1', nphi=99)
+    # ip = ThetaCurvaturePenalty(stel, minor_radius, ntheta = ntheta, kappa_target=kappa_target)
+
+    # set up the expansion
+    minor_radius = 0.1
+    ntheta = 32
+    kappa_target = 4/minor_radius
+    stel = QscOptimizable.from_paper("2022 QH nfp3 beta")
+    ip = ThetaCurvaturePenalty(stel, minor_radius, ntheta = ntheta, kappa_target=kappa_target)
+    stel.unfix_all()
+
+    # rescale the dofs to get better finite difference accuracy
+    scale = stel.get_scale(**{'p2':stel.get('p2').item()})
+    y0 = stel.x / scale
+    dx_dy = scale
+
+    # normalize the penalty so that it is O(1)
+    ip = (1/ip.J()) * ip
+
+    # compute derivatives
+    dJ_by_dqsc = ip.dJ() * dx_dy
+
+    # check derivative w.r.t. axis dofs w/ finite difference
+    def fun(y):
+        x = y * scale
+        stel.x = x
+        return ip.J()
+    dip_by_dqsc_fd = finite_difference(fun, y0, 1e-8)
+    err = np.max(np.abs(dip_by_dqsc_fd - dJ_by_dqsc))
+    print(err)
+    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+
 if __name__ == "__main__":
     test_save_load()
+    test_get_scale()
     test_FieldError()
     test_GradFieldError()
     test_ExternalFieldError()
@@ -652,3 +709,4 @@ if __name__ == "__main__":
     test_SurfaceSelfIntersectionPenalty()
     test_PressurePenalty()
     test_CurveAxisDistancePenalty()
+    test_ThetaCurvaturePenalty()

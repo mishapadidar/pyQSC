@@ -89,6 +89,37 @@ class QscOptimizable(Qsc, Optimizable):
                   **d)
 
         return out
+    
+    def get_scale(self, **kwargs):
+        """
+        Construct an array (not tensor) of scales for each unfixed degree of freedom,
+        ordered by the degrees of freedom. The scale can be used to normalize
+        the degrees of freedom for optimization to approximately unit scale,
+
+        Example:
+            stel = Qsc.from_paper('preceise QA')
+            scale = stel.get_scale(**{'p2':5.0, 'zs(1)':7.0})
+            x_scaled = stel.x / scale # scaled DOFs
+
+        Args:
+            **kwargs: the scale for each degree of freedom can be passed as a keyword argument,
+                e.g. rc(0)=0.1, zs(2)=0.01, etabar=0.5, etc. If a degree of freedom is not passed,
+                a default scale is used: for Fourier modes with mode number m, the default scale is exp(-m),
+                and for the non-Fourier parameters (etabar, B2s, B2c, p2, I2) the default scale is 1.0.
+
+        Returns:
+            array: array of scales for each degree of freedom, in the same order as the (free) DOFs.
+        """
+        scale = []
+        for nn in self.names:
+            if self.is_free(nn):
+                if ('rc' in nn) or ('zs' in nn) or ('rs' in nn) or ('zc' in nn):
+                    # get the mode number
+                    mode_number = int(nn.split('(')[1].split(')')[0])
+                    scale.append(kwargs.pop(nn, np.exp(- mode_number)))
+                else:
+                    scale.append(kwargs.pop(nn, 1.0))
+        return np.array(scale)
 
 
 class FieldError(Optimizable):
@@ -1326,6 +1357,73 @@ class CurveAxisDistancePenalty(Optimizable):
         dJ = dJ_by_daxis + dJ_by_dcurve
 
         return dJ
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
+    
+class ThetaCurvaturePenalty(Optimizable):
+    def __init__(self, qsc, r, ntheta=32, kappa_target=0.0):
+        """Penalize the curvature of a flux surface in the theta direction.
+        This penalty reflects the inequality constraint,
+            kappa_theta <= kappa_target,
+        pointwise on a flux surface, where kappa_theta is the curvature 
+        of the flux surface in the theta direction. The penalty is,
+            J = (1/A) * int max(0, kappa_theta - kappa_target)^2 dA
+        where A is the area of the flux surface.
+
+        Args:
+            qsc (QscOptimizable): a QscOptimizable object
+            kappa_target (float): target value of kappa. Defaults to 0.
+        """
+        self.qsc = qsc
+        self.r = r
+        self.ntheta = ntheta
+        self.kappa_target = kappa_target
+        Optimizable.__init__(self, depends_on=[qsc])
+
+    def obj(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        area = self.qsc.surface_area(self.r, ntheta=self.ntheta)
+        kappa = self.qsc.surface_theta_curvature(r=self.r, ntheta=self.ntheta) # (nphi, ntheta)
+        integrand = torch.maximum(torch.tensor(0.0), kappa - self.kappa_target)**2
+        loss = self.qsc.surface_integral(integrand, self.r) / area
+        return loss
+    
+    def dobj(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
     
     def J(self):
         """Compute the objective function, returning a float.
