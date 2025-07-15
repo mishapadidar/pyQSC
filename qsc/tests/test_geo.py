@@ -5,6 +5,8 @@ import torch
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from qsc.util import finite_difference_torch
+from unittest.mock import patch
+
 
 
 def test_surface():
@@ -211,6 +213,26 @@ def test_normal_autodiff():
     err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
     assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
 
+def test_surface_area():
+    """ Test surface area computation """
+
+    # test the area of a torus with major radius R and minor radius r
+    R = 1.0
+    r = 0.1
+    stel = Qsc(rc=[R,r], zs=[0,r], nphi=31, nfp=1, order='r3')
+    a = 0.5 * (R-r)
+    c = 0.5 * (R+r)
+    ntheta = 32
+    theta = np.linspace(0, 2*np.pi, ntheta, endpoint=False)[None, :]
+    theta = torch.tensor(theta)
+    dA = a * (c + a * torch.cos(theta))
+    area_actual =  4 * np.pi**2 * a * c
+    with patch.object(Qsc, 'surface_area_element', return_value=dA) as mock_method:
+        area = stel.surface_area(r=r, ntheta=ntheta).item()
+        assert abs(area - area_actual) < 1e-15, f"Surface area incorrect: {area}"
+        mock_method.assert_called_once()
+
+
 if __name__ == "__main__":
     test_surface()
     test_surface_tangents()
@@ -218,3 +240,4 @@ if __name__ == "__main__":
     test_surface_nonvac()
     test_surface_autodiff()
     test_normal_autodiff()
+    test_surface_area()

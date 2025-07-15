@@ -407,6 +407,38 @@ def jacobian(self, r, ntheta=64):
     jacobian_det = torch.sum(dsurface_by_dr * normal, axis=-1) # (nphi, ntheta)
     return jacobian_det
 
+def surface_area_element(self, r, ntheta=64):
+    """Compute the area element with respect to theta and varphi (not phi) of a flux surface with radius r.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+            The number of phi quadpoints is inherited from the class's nphi
+            attribute.
+
+    Returns:
+        tensor: (nphi, ntheta) tensor containing the area element dA = ||d(surface)/dtheta x d(surface)/dvarphi||.
+    """
+    normal = self.surface_normal(r, ntheta=ntheta) # (nphi, ntheta, 3)
+    dA = torch.linalg.norm(normal, dim=-1) # (nphi, ntheta)
+    return dA
+
+def surface_area(self, r, ntheta=64):
+    """Compute the area of a flux surface with radius r.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+            The number of phi quadpoints is inherited from the class's nphi
+            attribute.
+
+    Returns:
+        tensor: (1,) tensor containing the area of the flux surface.
+    """
+    X = torch.ones(self.nphi, ntheta) # (nphi, ntheta)
+    area = self.surface_integral(X, r)
+    return area
+
 def surface_theta_curvature(self, r, ntheta=64):
     """Compute the curvature of a flux surface, with radius r, in the theta direction,
         kappa = || dsurface/dtheta x d^2surface/(dtheta^2)|| / ||dsurface/dtheta||^3.

@@ -35,7 +35,7 @@ class Qsc(torch.nn.Module):
     from .calculate_r3 import calculate_r3, calculate_shear
     from .geo import (surface, dsurface_by_dvarphi, dsurface_by_dtheta,
                       dsurface_by_dr, surface_normal, jacobian, d2surface_by_dthetatheta,
-                      surface_theta_curvature)
+                      surface_theta_curvature, surface_area, surface_area_element)
     from .mercier import mercier
     from .r_singularity import calculate_r_singularity
     from .plot import plot, plot_boundary, get_boundary, B_fieldline, B_contour, plot_axis, flux_tube
@@ -49,7 +49,8 @@ class Qsc(torch.nn.Module):
                                  grad_B_external_on_axis_split, curl_taylor, divergence_taylor)
     from .configurations import from_paper, configurations
     from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, total_derivative,
-                             B_external_on_axis_mse, downsample_axis, subsample_axis_nodes, grad_B_external_on_axis_mse)
+                             B_external_on_axis_mse, downsample_axis, subsample_axis_nodes, grad_B_external_on_axis_mse,
+                             surface_integral)
     
     def __init__(self, rc, zs, rs=[], zc=[], nfp=1, etabar=1., sigma0=0., B0=1.,
                  I2=0., sG=1, spsi=1, nphi=61, B2s=0., B2c=0., p2=0., order="r1"):
