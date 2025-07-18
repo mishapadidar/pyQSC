@@ -90,7 +90,7 @@ class QscOptimizable(Qsc, Optimizable):
 
         return out
     
-    def get_scale(self, **kwargs):
+    def get_scale(self, alpha = 1.0, **kwargs):
         """
         Construct an array (not tensor) of scales for each unfixed degree of freedom,
         ordered by the degrees of freedom. The scale can be used to normalize
@@ -104,7 +104,7 @@ class QscOptimizable(Qsc, Optimizable):
         Args:
             **kwargs: the scale for each degree of freedom can be passed as a keyword argument,
                 e.g. rc(0)=0.1, zs(2)=0.01, etabar=0.5, etc. If a degree of freedom is not passed,
-                a default scale is used: for Fourier modes with mode number m, the default scale is exp(-m),
+                a default scale is used: for Fourier modes with mode number m, the default scale is exp(-alpha * m),
                 and for the non-Fourier parameters (etabar, B2s, B2c, p2, I2) the default scale is 1.0.
 
         Returns:
@@ -116,7 +116,7 @@ class QscOptimizable(Qsc, Optimizable):
                 if ('rc' in nn) or ('zs' in nn) or ('rs' in nn) or ('zc' in nn):
                     # get the mode number
                     mode_number = int(nn.split('(')[1].split(')')[0])
-                    scale.append(kwargs.pop(nn, np.exp(- mode_number)))
+                    scale.append(kwargs.pop(nn, np.exp(- alpha * mode_number)))
                 else:
                     scale.append(kwargs.pop(nn, 1.0))
         return np.array(scale)
