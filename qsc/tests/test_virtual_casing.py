@@ -56,11 +56,11 @@ def test_grad_B_external_on_axis_converges():
     config = "2022 QH nfp3 beta"
     naxis = 61
     nphi_list = [256, 512, 1024, 2048]
-    nphi_ref = 2 * nphi_list[-1]
-    mr = 0.13
+    nphi_ref = 8192
+    mr = 1/8
     ntheta = 256
-    p2_list = [-1e1, -1e3, -1e5]
-    I2 = -0.2
+    p2_list = [-2e1, -2e3, -2e5, -2e6]
+    I2 = 0.0
 
     for p2 in p2_list:
         # storage
@@ -74,13 +74,15 @@ def test_grad_B_external_on_axis_converges():
                 gradB_ext_vc = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta, ntarget=naxis)
 
             err = gradB_ref - gradB_ext_vc
-            errs.append(torch.max(torch.abs(err)).detach().numpy())
+            # errs.append(torch.max(torch.abs(err)).detach().numpy())
+            rel_err = 100 * torch.linalg.norm(err, axis=(0,1)) / torch.linalg.norm(gradB_ref, axis=(0,1))
+            errs.append(torch.max(rel_err).detach().numpy())
         plt.plot(nphi_list, errs, lw=3, marker='o', label=f'p2=%.2e'%p2)
 
     plt.yscale('log')
     plt.xscale('log')
     plt.xlabel('nphi', fontsize=14)
-    plt.ylabel('virtual casing error', fontsize=14)
+    plt.ylabel('relative error [%]', fontsize=14)
     plt.legend(loc='upper right')
     plt.tight_layout()
     plt.show()
@@ -94,18 +96,20 @@ def test_grad_B_external_on_axis_accuracy():
     mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
     ntheta = 256
     nphi = 8192
-    n_target = 32
+    n_axis = 61
     # storage 
     errs = []
     for mr in mr_list:
-        stel = Qsc.from_paper("precise QA", nphi=31, order='r2')
+        stel = Qsc.from_paper("precise QA", nphi=n_axis, order='r2')
         X_target = stel.XYZ0.T
         with torch.no_grad():
-            Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
-            # Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
-        Bext = stel.grad_B_tensor_cartesian() # (3, nphi)
+            Bext_vc = stel.grad_B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, 3, nphi)
+        Bext = stel.grad_B_tensor_cartesian() # (3, 3, nphi)
         err = Bext - Bext_vc
-        errs.append(torch.max(torch.abs(err)).detach().numpy())
+        rel_err = 100 * torch.linalg.norm(err, axis=(0,1)) / torch.linalg.norm(Bext, axis=(0,1))
+        errs.append(torch.max(rel_err).detach().numpy())
+        # errs.append(torch.max(torch.abs(err)).detach().numpy())
+
     plt.plot(mr_list, errs, lw=3, marker='o', label='error')
 
     # plot a quadratic e(r) = a*r^2
@@ -116,7 +120,7 @@ def test_grad_B_external_on_axis_accuracy():
     plt.yscale('log')
     plt.xscale('log')
     plt.xlabel('minor radius', fontsize=14)
-    plt.ylabel('virtual casing error', fontsize=14)
+    plt.ylabel('Relative error [%]', fontsize=14)
     plt.legend(loc='upper left')
     plt.tight_layout()
     plt.show()
@@ -126,7 +130,7 @@ def test_grad_B_external_on_axis_consistency():
     Test the accuracy of the surface computation
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", nphi=32, order='r3', p2=-1e5)
+    stel = Qsc.from_paper("precise QA", nphi=33, order='r3', p2=-1e5)
 
     minor_radius = 0.1
     ntheta = 256
@@ -136,14 +140,14 @@ def test_grad_B_external_on_axis_consistency():
 
     # single evaluation
     with torch.no_grad():
-        grad_Bext_vc = stel.grad_B_external_on_axis(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+        grad_Bext_vc = stel.grad_B_external_on_axis_taylor(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
     grad_Bext_vc = grad_Bext_vc.detach().numpy()
 
     # compute the derivative with finite difference
     def fd_obj(X, ii):
         X = torch.tensor(X).reshape((1,-1))
         with torch.no_grad():
-            Bext_vc = stel.B_external_on_axis(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X) # (3, nphi)
+            Bext_vc = stel.B_external_on_axis_taylor(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X) # (3, nphi)
         return Bext_vc.detach().numpy()
     
     grad_Bext_fd = np.zeros(np.shape(grad_Bext_vc))

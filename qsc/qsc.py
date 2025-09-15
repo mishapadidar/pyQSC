@@ -46,7 +46,8 @@ class Qsc(torch.nn.Module):
                                  grad_B_external_on_axis, build_virtual_casing_interpolants,
                                  B_external_on_axis_nodes, grad_B_external_on_axis_nodes,
                                  B_external_on_axis_split, build_virtual_casing_interpolants_split,
-                                 grad_B_external_on_axis_split, curl_taylor, divergence_taylor)
+                                 grad_B_external_on_axis_split, curl_taylor, divergence_taylor,
+                                 grad_B_external_on_axis_taylor)
     from .configurations import from_paper, configurations
     from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, total_derivative,
                              B_external_on_axis_mse, downsample_axis, subsample_axis_nodes, grad_B_external_on_axis_mse,
