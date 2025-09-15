@@ -675,7 +675,51 @@ class IotaPenalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dpenalty()
+
+class Iota(Optimizable):
+    def __init__(self, qsc):
+        """Compute the rotational transform on axis, iota0.
+
+        Args:
+            qsc (Optimizable, Qsc):
+        """
+        self.qsc = qsc
+        Optimizable.__init__(self, depends_on=[qsc])
     
+    def diota(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        loss = self.qsc.iota
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+        # arr = np.array([g.detach().numpy().flatten() for g in dloss_by_ddofs]) # array
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.qsc.iota.detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.diota()
+
 class AxisLengthPenalty(Optimizable):
     def __init__(self, qsc, target_length):
         """Penalty function
@@ -733,6 +777,51 @@ class AxisLengthPenalty(Optimizable):
         """
         return self.dpenalty()
     
+class AxisLength(Optimizable):
+    def __init__(self, qsc):
+        """Compute the axis length.
+
+        Args:
+            qsc (Optimizable, Qsc):
+        """
+        self.qsc = qsc
+        Optimizable.__init__(self, depends_on=[qsc])
+    
+    def dlength(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        loss = self.qsc.axis_length
+        dloss_by_ddofs = self.qsc.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+        # arr = np.array([g.detach().numpy().flatten() for g in dloss_by_ddofs]) # array
+        dJ_by_daxis = Derivative({self.qsc: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.qsc.axis_length.detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dlength()
+    
+
 class GradBPenalty(Optimizable):
 
     def __init__(self, qsc):
