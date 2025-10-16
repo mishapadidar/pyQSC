@@ -115,7 +115,7 @@ def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
     Returns:
         (tensor): (1,) Loss value as a scalar tensor.
     '''
-    Bext_vc = self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, n)
+    Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi) # (3, n)
     dl = self.d_l_d_phi * self.d_phi # (nphi,)
     loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
     return loss
@@ -137,7 +137,7 @@ def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=256, nphi=1024):
     Returns:
         (tensor): (1,) Loss value as a scalar tensor.
     '''
-    grad_Bext = self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, 3, n)
+    grad_Bext = self.grad_B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi) # (3, 3, n)
     dl = self.d_l_d_phi * self.d_phi # (nphi,)
     loss = 0.5 * torch.sum(torch.sum((grad_Bext - grad_B_target)**2, dim=(0,1)) * dl) # scalar tensor
     return loss

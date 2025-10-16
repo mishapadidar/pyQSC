@@ -403,7 +403,7 @@ class ExternalFieldError(Optimizable):
         # Qsc field
         X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
         d_l_d_phi = torch.clone(self.qsc.d_l_d_phi) # (ntarget,)
-        B_qsc = self.qsc.B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
+        B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
 
         # coil field
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -538,7 +538,7 @@ class GradExternalFieldError(Optimizable):
         # Qsc field
         X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
         d_l_d_phi = torch.clone(self.qsc.d_l_d_phi) # (ntarget,)
-        grad_B_qsc = self.qsc.grad_B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
+        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
         grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
 
         # coil field

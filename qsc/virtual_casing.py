@@ -150,6 +150,46 @@ def B_taylor(self, r, ntheta=64, vacuum_component=False):
 
     return B_surf
 
+def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
+    """Compute B_external on the magnetic axis using the virtual casing principle. If the
+    configuration is in vacuum, the vacuum solution is returned.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+
+    Returns:
+        (tensor): (3, n) tensor of evaluations of B_external.
+    """
+
+    if (self.p2 == 0.0) and (self.I2 == 0.0):
+        # in vacuum, return vacuum solution
+        return self.Bfield_cartesian()
+    else:
+        # use Taylor expansion method
+        return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+    
+def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
+    """Compute grad_B_external on the magnetic axis using the virtual casing principle. If the
+    configuration is in vacuum, the vacuum solution is returned.
+
+    Args:
+        r (float): radius of flux surface
+        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
+        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
+
+    Returns:
+        (tensor): (3, 3, n) tensor of evaluations of grad_B_external.
+    """
+
+    if (self.p2 == 0.0) and (self.I2 == 0.0):
+        # in vacuum, return vacuum solution
+        return self.grad_B_tensor_cartesian()
+    else:
+        # use Taylor expansion method
+        return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+    
 @lru_cache(maxsize=32)
 def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[]):
     """Compute B_external on the magnetic axis using the virtual casing principle.
