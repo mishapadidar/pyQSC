@@ -107,21 +107,16 @@ def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
     radius r.
 
     Args:
-        B_target (tensor): (3, ntarget) tensor of target magnetic field values.
+        B_target (tensor): (3, n) tensor of target magnetic field values.
         r (float): radius of flux surface
         ntheta (int, optional): number of theta quadrature points for virtual casing integral. Defaults to 256.
         nphi (int, optional): number of phi quadrature points for virtual casing integral. Defaults to 1024.
+
     Returns:
         (tensor): (1,) Loss value as a scalar tensor.
     '''
-    ntarget = B_target.shape[1]
-    d_l_d_phi = self.subsample_axis_nodes(ntarget)[1] # (ntarget,)
-    Bext_vc = self.B_external_on_axis_nodes(r=r, ntheta=ntheta, nphi=nphi, ntarget=ntarget) # (3, ntarget)
-    # TODO: dphi is not correct if nodes are not evenly spaced
-    # TODO: need to use idx to get the spacing.
-
-    dphi = (2 * torch.pi / self.nfp) / ntarget
-    dl = d_l_d_phi * dphi # (ntarget,)
+    Bext_vc = self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, n)
+    dl = self.d_l_d_phi * self.d_phi # (nphi,)
     loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
     return loss
 
@@ -134,18 +129,16 @@ def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=256, nphi=1024):
     radius r.
 
     Args:
-        grad_B_target (tensor): (3, 3, ntarget) tensor of target magnetic field values.
+        grad_B_target (tensor): (3, 3, n) tensor of target magnetic field values.
         r (float): radius of flux surface
         ntheta (int, optional): number of theta quadrature points for virtual casing integral. Defaults to 256.
         nphi (int, optional): number of phi quadrature points for virtual casing integral. Defaults to 1024.
+
     Returns:
         (tensor): (1,) Loss value as a scalar tensor.
     '''
-    ntarget = grad_B_target.shape[-1]
-    d_l_d_phi = self.subsample_axis_nodes(ntarget)[1] # (ntarget,)
-    grad_Bext = self.grad_B_external_on_axis_nodes(r=r, ntheta=ntheta, nphi=nphi, ntarget=ntarget) # (3, 3, ntarget)
-    dphi = (2 * torch.pi / self.nfp) / ntarget
-    dl = d_l_d_phi * dphi # (ntarget,)
+    grad_Bext = self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, 3, n)
+    dl = self.d_l_d_phi * self.d_phi # (nphi,)
     loss = 0.5 * torch.sum(torch.sum((grad_Bext - grad_B_target)**2, dim=(0,1)) * dl) # scalar tensor
     return loss
 

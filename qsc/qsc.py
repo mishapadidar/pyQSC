@@ -42,9 +42,7 @@ class Qsc(torch.nn.Module):
     from .Frenet_to_cylindrical import Frenet_to_cylindrical, to_RZ
     from .to_vmec import to_vmec
     from .util import B_mag
-    from .virtual_casing import (B_external_on_axis, B_taylor, B_external_on_axis_taylor,
-                                 grad_B_external_on_axis, build_virtual_casing_interpolants,
-                                 B_external_on_axis_nodes, grad_B_external_on_axis_nodes,
+    from .virtual_casing import (B_taylor, B_external_on_axis_taylor,                        
                                  B_external_on_axis_split, build_virtual_casing_interpolants_split,
                                  grad_B_external_on_axis_split, curl_taylor, divergence_taylor,
                                  grad_B_external_on_axis_taylor)
@@ -166,10 +164,11 @@ class Qsc(torch.nn.Module):
         Clear the cached values for the virtual casing and other.
         """
         # clear the cached values
-        self.build_virtual_casing_interpolants.cache_clear()
         self.build_virtual_casing_interpolants_split.cache_clear()
-        self.B_external_on_axis_nodes.cache_clear()
-        self.grad_B_external_on_axis_nodes.cache_clear()
+        self.B_external_on_axis_split.cache_clear()
+        self.grad_B_external_on_axis_split.cache_clear()
+        self.B_external_on_axis_taylor.cache_clear()
+        self.grad_B_external_on_axis_taylor.cache_clear()
     
     def get_dofs(self, as_tuple=False):
         """

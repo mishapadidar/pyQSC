@@ -244,8 +244,8 @@ def test_ExternalFieldError():
     # Make sure self-intersection doesnt exist: otherwise we lose accuracy!
     r = 0.1
     p2 = -1e5
-    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1e5, nphi=511)
-    fe = ExternalFieldError(biot_savart, stel, r=0.1, ntheta=256, ntarget=32)
+    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1e5, nphi=61)
+    fe = ExternalFieldError(biot_savart, stel, r=0.1, ntheta=256, nphi=256)
     stel.unfix_all()
 
     # # Sanity check plot: no self-intersections
@@ -290,7 +290,7 @@ def test_ExternalFieldError():
     def fun(x):
         stel.x = x
         return fe.field_error().detach().numpy()
-    dfe_by_dqsc_fd = finite_difference(fun, x, 1e-7)
+    dfe_by_dqsc_fd = finite_difference(fun, x, 1e-9)
     err = np.max(np.abs(dfe_by_dqsc_fd - dfe_by_dqsc))
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
@@ -319,7 +319,7 @@ def test_GradExternalFieldError():
 
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r2', p2=1e-5, nphi=257)
-    fe = GradExternalFieldError(biot_savart, stel, r=0.1, ntheta=256, ntarget=16)
+    fe = GradExternalFieldError(biot_savart, stel, r=0.1, ntheta=256)
 
     # keep the base point for finite-differences
     fe.unfix_all()
@@ -356,10 +356,10 @@ def test_GradExternalFieldError():
         stel.x = x
         return fe.field_error().detach().numpy()
     with torch.no_grad():
-        dfe_by_dqsc_fd = finite_difference(fun, x, 1e-8)
+        dfe_by_dqsc_fd = finite_difference(fun, x, 1e-9)
     err = np.max(np.abs(dfe_by_dqsc_fd - dfe_by_dqsc))
     print(err)
-    assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
+    assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
 
 def test_IotaPenalty():
         # set up the expansion

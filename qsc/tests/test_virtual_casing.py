@@ -6,39 +6,33 @@ import matplotlib.pyplot as plt
 from qsc.util import finite_difference, finite_difference_torch
 
 
-def test_B_external_on_axis():
+def test_B_external_on_axis_taylor():
     """
     Test the accuracy of the B_external computation
     """
 
-    """ plot error against minor radius"""
+    """ plot error against minor radius. Should be O(r^3)"""
     mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
     ntheta = 256
     nphi = 8192
-    n_target = 32
     # storage 
     errs = []
     for mr in mr_list:
-        stel = Qsc.from_paper("precise QA", nphi=61, order='r2')
-        idx_target = range(0, stel.nphi, n_target)
-        X_target = stel.XYZ0[:,idx_target].T
+        stel = Qsc.from_paper("precise QA", nphi=61, order='r3')
+        X_target = stel.XYZ0.T
         with torch.no_grad():
-            # Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
             Bext_vc = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
-        Bext = stel.Bfield_cartesian()[:,idx_target] # (3, nphi)
+
+        Bext = stel.Bfield_cartesian() # (3, nphi)
         err = Bext - Bext_vc
         errs.append(torch.max(torch.abs(err)).detach().numpy())
-    plt.plot(mr_list, errs, lw=3, marker='o', label='r2')
-
-    # plot a quadratic e(r) = a*r^2
-    a = errs[-1] / (mr_list[-1] **2)
-    x = np.linspace(mr_list[0], mr_list[-1], 30)
-    y = a * x**2
-    plt.plot(x, y, lw=3, linestyle='--', label='theoretical $O(r^2)$')
+    
+    plt.plot(mr_list, errs, lw=3, marker='o', color='k')
+    # plot a cubic e(r) = a*r^3
     a = errs[-1] / (mr_list[-1] **3)
     x = np.linspace(mr_list[0], mr_list[-1], 30)
     y = a * x**3
-    plt.plot(x, y, lw=3, linestyle='--', label='theoretical $O(r^3)$')
+    plt.plot(x, y, lw=1, linestyle='--', color='k', label='$O(r^3)$')
     plt.yscale('log')
     plt.xscale('log')
     plt.xlabel('minor radius', fontsize=14)
@@ -47,10 +41,12 @@ def test_B_external_on_axis():
     plt.tight_layout()
     plt.show()
 
-def test_grad_B_external_on_axis_converges():
+
+def test_grad_B_external_on_axis_taylor_converges():
     """
-    Show that the computation of grad_B_external_on_axis converges with nphi
-    We expect spectral convergence. The error may grow with p2.
+    Show that the computation of grad_B_external_on_axis_taylor converges with nphi.
+    We expect spectral convergence. 
+    The error may grow with p2.
     """
 
     config = "2022 QH nfp3 beta"
@@ -67,11 +63,11 @@ def test_grad_B_external_on_axis_converges():
         errs = []
 
         stel = Qsc.from_paper(config, nphi=naxis, p2=p2, I2=I2)
-        gradB_ref = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi_ref, ntheta_eval=ntheta, ntarget=naxis)
+        gradB_ref = stel.grad_B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi_ref)
 
         for nphi in nphi_list:
             with torch.no_grad():
-                gradB_ext_vc = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi, ntheta_eval=ntheta, ntarget=naxis)
+                gradB_ext_vc = stel.grad_B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi)
 
             err = gradB_ref - gradB_ext_vc
             # errs.append(torch.max(torch.abs(err)).detach().numpy())
@@ -87,9 +83,10 @@ def test_grad_B_external_on_axis_converges():
     plt.tight_layout()
     plt.show()
 
-def test_grad_B_external_on_axis_accuracy():
+def test_grad_B_external_on_axis_taylor_accuracy():
     """
-    Test the accuracy of the surface computation
+    Test the accuracy of the grad_B_external_on_axis_taylor computation in vacuum.
+    Should converge at O(r^2).
     """
 
     """ plot error against minor radius"""
@@ -108,15 +105,15 @@ def test_grad_B_external_on_axis_accuracy():
         err = Bext - Bext_vc
         rel_err = 100 * torch.linalg.norm(err, axis=(0,1)) / torch.linalg.norm(Bext, axis=(0,1))
         errs.append(torch.max(rel_err).detach().numpy())
-        # errs.append(torch.max(torch.abs(err)).detach().numpy())
 
-    plt.plot(mr_list, errs, lw=3, marker='o', label='error')
+    plt.plot(mr_list, errs, lw=2, marker='o', color='k', label='error')
 
     # plot a quadratic e(r) = a*r^2
     a = errs[-1] / (mr_list[-1] **2)
     x = np.linspace(mr_list[0], mr_list[-1], 30)
     y = a * x**2
-    plt.plot(x, y, lw=3, linestyle='--', color='k', label='r^2 reference')
+    plt.plot(x, y, lw=1, linestyle='--', color='k', label='$\mathcal{O}(r^2)$ reference')
+
     plt.yscale('log')
     plt.xscale('log')
     plt.xlabel('minor radius', fontsize=14)
@@ -125,34 +122,35 @@ def test_grad_B_external_on_axis_accuracy():
     plt.tight_layout()
     plt.show()
 
-def test_grad_B_external_on_axis_consistency():
+def test_grad_B_external_on_axis_taylor_consistency():
     """
-    Test the accuracy of the surface computation
+    Check that grad_B_external_on_axis_taylor is consistent with finite difference of B_external_on_axis_taylor.
     """
     # set up the expansion
-    stel = Qsc.from_paper("precise QA", nphi=33, order='r3', p2=-1e5)
+    stel = Qsc.from_paper("precise QA", nphi=61, order='r3', p2=0.0)
 
     minor_radius = 0.1
     ntheta = 256
     nphi = 2048
-    idx_target = range(0, stel.nphi, 64)
-    X_target = stel.XYZ0[:,idx_target].T
 
-    # single evaluation
+    X_target = torch.clone(stel.XYZ0.T)
+    
+    # evaluate gradient
     with torch.no_grad():
-        grad_Bext_vc = stel.grad_B_external_on_axis_taylor(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, nphi)
+        grad_Bext_vc = stel.grad_B_external_on_axis_taylor(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X_target) # (3, 3, nphi)
     grad_Bext_vc = grad_Bext_vc.detach().numpy()
 
-    # compute the derivative with finite difference
-    def fd_obj(X, ii):
+    # function for finite difference
+    def fd_obj(X):
         X = torch.tensor(X).reshape((1,-1))
         with torch.no_grad():
             Bext_vc = stel.B_external_on_axis_taylor(r=minor_radius, ntheta=ntheta, nphi=nphi, X_target = X) # (3, nphi)
-        return Bext_vc.detach().numpy()
+        return Bext_vc.detach().numpy().flatten()
     
+    # compute the derivative with finite difference
     grad_Bext_fd = np.zeros(np.shape(grad_Bext_vc))
     for ii, x in enumerate(X_target.detach().numpy()):
-        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-3, ii=ii)[0]
+        grad_Bext_fd[:,:,ii] = finite_difference(fd_obj, x, 1e-4)
 
     err = grad_Bext_vc - grad_Bext_fd
     print(np.max(np.abs(err)))
@@ -160,6 +158,11 @@ def test_grad_B_external_on_axis_consistency():
 
 
 def test_n_cross_B():
+    """
+    Compute the diffefence between two methods of computing n x B. The Taylor field method is a higher
+    order method than the Boozer representation. We expect to see the predictions diverge as r^3
+    as r approaches zero.
+    """
     # set up the expansion
     stel1 = Qsc.from_paper("precise QA", nphi=511, order='r2')
     stel2 = Qsc.from_paper("precise QA", nphi=511, order='r2')
@@ -189,8 +192,6 @@ def test_n_cross_B():
     plt.plot(r_list, error_array, lw=2, label='data')
     c = error_array[0]/r_list[0]**3
     plt.plot(r_list, c*r_list**3, '--', color='k', lw=2, label='r^3')
-    c = error_array[0]/r_list[0]**2
-    plt.plot(r_list, c*r_list**2, '--', color='grey', lw=2, label='r^2')
     plt.xscale('log')
     plt.yscale('log')
     plt.legend(loc='upper left')
@@ -198,85 +199,11 @@ def test_n_cross_B():
     plt.xlabel('$r$')
     plt.show()
 
-def test_B_external_on_axis_split():
+
+def test_B_external_on_axis_taylor_autodiff():
     """
-    Test the accuracy of the B_external_on_axis_split computation
-    """
-    mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
-    ntheta = 256
-    nphi = 4096
-
-    """ Check accuracy in vacuum """
-    stel = Qsc.from_paper("precise QA", nphi=31, I2=0.0, p2=0.0, order='r2')
-    Bext = stel.Bfield_cartesian()# (3, nphi)
-
-    # storage 
-    errs = []
-    for mr in mr_list:
-        with torch.no_grad():
-            Bext_vc = stel.B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        err = Bext - Bext_vc
-        errs.append(torch.max(torch.abs(err)).detach().numpy())
-    
-    # should be zero error!
-    assert np.allclose(errs, 0.0), "B_external_on_axis_split incorrect in vacuum case"
-
-    """ Error of original calculation vs minor radius in vacuum """
-
-    stel = Qsc.from_paper("precise QA", nphi=61, order='r2', p2 = 0.0, I2=0.0)
-    Bext = stel.Bfield_cartesian()# (3, nphi)
-    errs_taylor = []
-    errs_split = []
-    for mr in mr_list:
-        with torch.no_grad():
-            Bext_taylor = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-            Bext_split = stel.B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        err = Bext - Bext_taylor
-        errs_taylor.append(torch.max(torch.abs(err)).detach().numpy())
-        err = Bext - Bext_split
-        errs_split.append(torch.max(torch.abs(err)).detach().numpy())
-    
-    major_radius = float(stel.rc[0].detach().numpy().item())
-    aspect_ratio = major_radius / np.array(mr_list)
-    # taylor method errors
-    plt.plot(aspect_ratio, errs_taylor, lw=3, color='tab:blue', marker='o', label='Naive Method')
-    plt.plot(aspect_ratio, errs_split, lw=3, color='tab:orange', marker='o', label='Splitting Method')
-    plt.grid(color='grey', linewidth=1, alpha=0.7)
-    plt.yscale('symlog', linthresh=1e-5)
-    plt.xscale('log')
-    plt.xlabel('Aspect Ratio', fontsize=14)
-    plt.ylabel('$|B_{ext} - B_{ext}^{NAE}|_{\infty}$', fontsize=14)
-    plt.title("Approximation Accuracy of $B_{ext}$ in Vacuum")
-    plt.legend(loc='upper right')
-    plt.tight_layout()
-    plt.show()
-
-def test_grad_B_external_on_axis_split():
-    """
-    Test the accuracy of the grad_B_external_on_axis_split computation
-    """
-    mr_list = [0.01, 0.02, 0.04, 0.08, 0.1, 0.12, 0.14]
-    ntheta = 256
-    nphi = 4096
-
-    """ Check accuracy in vacuum """
-    stel = Qsc.from_paper("precise QA", nphi=31, I2=0.0, p2=0.0, order='r2')
-    grad_B_vac = stel.grad_B_tensor_cartesian() # (3, 3, nphi)
-
-    # storage 
-    errs = []
-    for mr in mr_list:
-        with torch.no_grad():
-            grad_Bext_vc = stel.grad_B_external_on_axis_split(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        err = grad_B_vac - grad_Bext_vc
-        errs.append(torch.max(torch.abs(err)).detach().numpy())
-    
-    # should be zero error!
-    assert np.allclose(errs, 0.0), "grad_B_external_on_axis_split incorrect in vacuum case"
-
-def test_B_external_on_axis_split_autodiff():
-    """
-    Test autodifferentation of B_external_on_axis_split
+    Test autodifferentation of B_external_on_axis_taylor. 
+    Compare against finite difference.
     """
     ntheta = 256
     nphi=2048
@@ -285,8 +212,8 @@ def test_B_external_on_axis_split_autodiff():
     stel = Qsc.from_paper("precise QA", nphi=61, I2=1.0, p2=-1e3, order='r2')
     
     # mean squared error
-    B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
-    mean = torch.mean(B_ext).detach()
+    B_ext = stel.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+    mean = torch.mean(B_ext.detach())
     loss = torch.mean((B_ext - mean)**2)
 
     # compute the gradient using autodiff
@@ -302,10 +229,10 @@ def test_B_external_on_axis_split_autodiff():
     def fd_obj(x):
         stel.rc.data = x
         stel.calculate()
-        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        B_ext = stel.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
         loss = torch.mean((B_ext - mean)**2).detach()
         return loss
-    dloss_by_drc_fd = finite_difference_torch(fd_obj, x0, 1e-7)
+    dloss_by_drc_fd = finite_difference_torch(fd_obj, x0, 1e-8)
     err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
     print(err.item())
     assert err.item() < 1e-3, f"dloss/drc finite difference check failed: {err.item()}"
@@ -316,10 +243,10 @@ def test_B_external_on_axis_split_autodiff():
     def fd_obj(x):
         stel.zs.data = x
         stel.calculate()
-        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        B_ext = stel.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
         loss = torch.mean((B_ext - mean)**2).detach()
         return loss
-    dloss_by_dzs_fd = finite_difference_torch(fd_obj, x0, 1e-7)
+    dloss_by_dzs_fd = finite_difference_torch(fd_obj, x0, 1e-8)
     err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
     print(err.item())
     assert err.item() < 1e-3, f"dloss/dzs finite difference check failed: {err.item()}"
@@ -328,44 +255,44 @@ def test_B_external_on_axis_split_autodiff():
     # check etabar gradient with finite difference
     x0 = torch.clone(torch.tensor([stel.etabar.detach()]))
     def fd_obj(x):
-        stel.etabar.data = x
+        stel.etabar.data = x[0]
         stel.calculate()
-        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        B_ext = stel.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
         loss = torch.mean((B_ext - mean)**2).detach()
         return loss
-    dloss_by_detabar_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    dloss_by_detabar_fd = finite_difference_torch(fd_obj, x0, 1e-4)
     err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
     print(err.item())
     assert err.item() < 1e-3, f"dloss/detabar finite difference check failed: {err.item()}"
-    stel.etabar.data = x0 # restore the original value after finite difference check
+    stel.etabar.data = x0[0] # restore the original value after finite difference check
 
     # check p2 gradient with finite difference
     x0 = torch.clone(torch.tensor([stel.p2.detach()]))
     def fd_obj(x):
-        stel.p2.data = x
+        stel.p2.data = x[0]
         stel.calculate()
-        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        B_ext = stel.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
         loss = torch.mean((B_ext - mean)**2).detach()
         return loss
-    dloss_by_dp2_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    dloss_by_dp2_fd = finite_difference_torch(fd_obj, x0, 1e-4)
     err = torch.abs(dloss_by_dp2 - dloss_by_dp2_fd)
     print(err.item())
     assert err.item() < 1e-3, f"dloss/dp2 finite difference check failed: {err.item()}"
-    stel.p2.data = x0 # restore the original value after finite difference check
+    stel.p2.data = x0[0] # restore the original value after finite difference check
 
     # check I2 gradient with finite difference
     x0 = torch.clone(torch.tensor([stel.I2.detach()]))
     def fd_obj(x):
-        stel.I2.data = x
+        stel.I2.data = x[0]
         stel.calculate()
-        B_ext = stel.B_external_on_axis_split(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        B_ext = stel.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
         loss = torch.mean((B_ext - mean)**2).detach()
         return loss
-    dloss_by_dI2_fd = finite_difference_torch(fd_obj, x0, 1e-3)
+    dloss_by_dI2_fd = finite_difference_torch(fd_obj, x0, 1e-4)
     err = torch.abs(dloss_by_dI2 - dloss_by_dI2_fd)
     print(err.item())
     assert err.item() < 1e-3, f"dloss/dI2 finite difference check failed: {err.item()}"
-    stel.I2.data = x0 # restore the original value after finite difference check
+    stel.I2.data = x0[0] # restore the original value after finite difference check
 
 
 def test_B_taylor_autodiff():
@@ -453,25 +380,23 @@ def test_div_and_curl():
     ntheta = 121
 
     curl = stel.curl_taylor(r, ntheta=ntheta, vacuum_component=True) 
-    err = torch.max(torch.norm(curl, dim=2)) # (nphi, ntheta)
+    err = torch.max(torch.norm(curl, dim=2)).detach().numpy() # (nphi, ntheta)
     print(err)
     assert err < 1e-10, f"curl is nonzero: {err.item()}"
 
     # divergence
     div = stel.divergence_taylor(r, ntheta=ntheta, vacuum_component=True)
-    err = torch.max(torch.abs(div))
+    err = torch.max(torch.abs(div)).detach().numpy()
     print(err) # (nphi, ntheta)
     assert err < 1e-9, f"div is nonzero: {err.item()}"
 
 
 if __name__ == "__main__":
-    test_B_external_on_axis()
+    test_B_external_on_axis_taylor()
+    test_grad_B_external_on_axis_taylor_converges()
+    test_grad_B_external_on_axis_taylor_accuracy()
+    test_grad_B_external_on_axis_taylor_consistency()
     test_n_cross_B()
-    test_grad_B_external_on_axis_accuracy()
-    test_grad_B_external_on_axis_consistency()
-    test_grad_B_external_on_axis_converges()
-    test_B_external_on_axis_split()
-    test_grad_B_external_on_axis_split()
-    test_B_external_on_axis_split_autodiff()
+    test_B_external_on_axis_taylor_autodiff()
     test_B_taylor_autodiff()
     test_div_and_curl()

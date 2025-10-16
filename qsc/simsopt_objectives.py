@@ -333,7 +333,7 @@ class GradFieldError(Optimizable):
         return self.dfield_error()
 
 class ExternalFieldError(Optimizable):
-    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, ntarget=32):
+    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
         """Integrated mean-squared error between the Cartesian external magnetic field on axis
         and a target magnetic field over the magnetic axis,
                 Loss = (1/2) int |B - B_target|**2 dl
@@ -348,17 +348,12 @@ class ExternalFieldError(Optimizable):
                 Defaults to 256.
             nphi (int, optional): Number of phi quadrature points for virtual casing integral.
                 Defaults to 1024.
-            ntarget (int, optional): Number of points on the magnetic axis at
-                which to evaluate objective. Must be less than or equal to the number of points on axis.
-                For spectral convergence choose ntarget to be a divisor of the number of points on the axis.
-                Defaults to 32.
         """
         self.bs = bs
         self.qsc = qsc
         self.r = r
         self.ntheta = ntheta
         self.nphi = nphi
-        self.ntarget = ntarget
         self.need_to_run_code = True
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
@@ -384,12 +379,11 @@ class ExternalFieldError(Optimizable):
             return self.loss
         
         # evaluate coil field
-        X_target = self.qsc.subsample_axis_nodes(ntarget=self.ntarget)[0] # (3, ntarget)
-        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
-        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
+        X_target_np = self.qsc.XYZ0.detach().numpy().T # (n, 3)
+        X_target_np = np.ascontiguousarray(X_target_np) # (n, 3)
 
         self.bs.set_points(X_target_np)
-        B_coil = self.bs.B().T # (3, ntarget)
+        B_coil = self.bs.B().T # (3, n)
         
         # compute loss
         loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
@@ -407,8 +401,9 @@ class ExternalFieldError(Optimizable):
             and Expansion DOFs.
         """
         # Qsc field
-        X_target, d_l_d_phi, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
-        B_qsc = self.qsc.B_external_on_axis_nodes(r=self.r, ntheta=self.ntheta, nphi=self.nphi, ntarget=self.ntarget).T.detach().numpy() # (ntarget, 3)
+        X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
+        d_l_d_phi = torch.clone(self.qsc.d_l_d_phi) # (ntarget,)
+        B_qsc = self.qsc.B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
 
         # coil field
         X_target_np = X_target.detach().numpy().T # (ntarget, 3)
@@ -417,7 +412,7 @@ class ExternalFieldError(Optimizable):
         B_coil = self.bs.B() # (ntarget, 3)
 
         # compute dl
-        dphi = (2 * torch.pi / self.qsc.nfp) / self.ntarget
+        dphi = torch.clone(self.qsc.d_phi)
         dl = (d_l_d_phi * dphi).detach().numpy().reshape((-1,1)) # (ntarget, 1)
 
         # derivative with respect to biot savart dofs
@@ -475,7 +470,7 @@ class ExternalFieldError(Optimizable):
         return self.dfield_error()
 
 class GradExternalFieldError(Optimizable):
-    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, ntarget=32):
+    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
         """        Integrated mean-squared error between the gradient of the external magnetic field on axis
         and the gradient of the Biot Savart field over the magnetic axis,
                 Loss = (1/2) int |grad_B_external - grad_B_bs|**2 dl
@@ -490,17 +485,12 @@ class GradExternalFieldError(Optimizable):
                 Defaults to 256.
             nphi (int, optional): Number of phi quadrature points for virtual casing integral.
                 Defaults to 1024.
-            ntarget (int, optional): Number of points on the magnetic axis at
-                which to evaluate objective. Must be less than or equal to the number of points on axis.
-                For spectral convergence choose ntarget to be a divisor of the number of points on the axis.
-                Defaults to 32.
         """
         self.bs = bs
         self.qsc = qsc
         self.r = r
         self.ntheta = ntheta
         self.nphi = nphi
-        self.ntarget = ntarget
         self.need_to_run_code = True
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
@@ -523,9 +513,8 @@ class GradExternalFieldError(Optimizable):
             return self.loss
         
         # evaluate coil field
-        X_target = self.qsc.subsample_axis_nodes(ntarget=self.ntarget)[0] # (3, ntarget)
-        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
-        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
+        X_target_np = self.qsc.XYZ0.detach().numpy().T # (n, 3)
+        X_target_np = np.ascontiguousarray(X_target_np) # (n, 3)
 
         self.bs.set_points(X_target_np)
         grad_B_coil = self.bs.dB_by_dX().T # (3, 3, ntarget)
@@ -547,9 +536,9 @@ class GradExternalFieldError(Optimizable):
             with respect to the BiotSavart and Qsc DOFs.
         """
         # Qsc field
-        X_target, d_l_d_phi, _ = self.qsc.subsample_axis_nodes(ntarget=self.ntarget) # (3, ntarget), (ntarget)
-        grad_B_qsc = self.qsc.grad_B_external_on_axis_nodes(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
-                                                      ntarget=self.ntarget)
+        X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
+        d_l_d_phi = torch.clone(self.qsc.d_l_d_phi) # (ntarget,)
+        grad_B_qsc = self.qsc.grad_B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
         grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
 
         # coil field
@@ -560,7 +549,8 @@ class GradExternalFieldError(Optimizable):
 
         # compute dl
         # dphi = np.diff(self.qsc.phi)[0]
-        dphi = (2 * np.pi / self.qsc.nfp) / self.ntarget
+        # dphi = (2 * np.pi / self.qsc.nfp) / self.ntarget
+        dphi = self.qsc.d_phi.detach().numpy()
         dl = d_l_d_phi.detach().numpy().reshape((-1,1,1)) * dphi
 
         # derivative with respect to biot savart dofs
