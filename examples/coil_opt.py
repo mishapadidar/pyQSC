@@ -26,7 +26,7 @@ coil_n_fourier_modes = 3
 coil_current = 100000.0 
 
 # axis parameters
-order = 'r2'
+order = 'r3'
 axis_n_fourier_modes = 7
 etabar = 1.0
 axis_nphi = 31
@@ -35,7 +35,7 @@ axis_nphi = 31
 minor_radius = 0.1
 ntheta_vc = 64
 nphi_vc = 256
-ntarget = axis_nphi
+
 
 # constraints
 iota_target = 0.61 # target iota
@@ -73,6 +73,7 @@ stel.unfix('etabar')
 for ii in range(1, axis_n_fourier_modes):
     stel.unfix(f'rc({ii})')
     stel.unfix(f'zs({ii})')
+stel.unfix('B2c')
 
 # plot the coils and axis
 xyz0 = stel.XYZ0.detach().numpy() # (3, nphi)
@@ -90,8 +91,8 @@ plt.show()
 """ set up the optimization problem """
 
 # field matching objectives
-fe = ExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta_vc, nphi=nphi_vc, ntarget=ntarget)
-ge = GradExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta_vc, nphi=nphi_vc, ntarget=ntarget)
+fe = ExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta_vc, nphi=nphi_vc)
+ge = GradExternalFieldError(biot_savart, stel, r=minor_radius, ntheta=ntheta_vc, nphi=nphi_vc)
 
 # quasi-symmetry
 b20_penalty = B20Penalty(stel)
