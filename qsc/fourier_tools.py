@@ -1,7 +1,7 @@
 import numpy as np
 # from scipy.fft import fft, fftfreq, fft2, ifft
 import torch
-from torch.fft import fft, fftfreq, fft2, ifft
+from torch.fft import fft, fftfreq, fft2, ifft, fftshift
 torch.set_default_dtype(torch.float64)
 
 
@@ -24,6 +24,35 @@ def fourier_interp1d(fx, points, period = 1.0):
     kn = fftfreq(size, period / size)
     eikx = torch.exp(2.j * torch.pi * torch.outer(points, kn))
     return torch.real(torch.matmul(eikx, coeffs) / size)
+
+def fourier_coeffs(fx):
+    """Compute the Fourier coefficients of a periodic function given
+    uniformly spaced evaluations, i.e. ak and bk in
+    f(x) = a0/2 + sum_{k=1}^{infty} [ ak cos(2 pi k x / period) + bk sin(2 pi k x / period) ]
+    
+    Args:
+        fx (array): uniformly spaced evaluations of f(x) on [0, period). Make sure
+        x was spaced using linspace(0, period, n, endpoint=False).
+
+    Returns:
+        ak (array): cosine coefficients
+        bk (array): sine coefficients
+    """
+    fhat = fft(fx)
+    size = len(fx)
+
+
+    # 1 / n is the cofficient from the inverse FFT
+    # 2 comes from taking only the positive frequencies
+    ak = (2 / size) * fhat.real
+    ak[0] = ak[0] / 2  # DC component should not be doubled
+    bk = (-2 / size) * fhat.imag
+
+    # only keep positive frequencies
+    ak = fftshift(ak)[size//2:]
+    bk = fftshift(bk)[size//2:]
+
+    return ak, bk
 
 def fourier_interp1d_regular_grid(fx, m):
     """

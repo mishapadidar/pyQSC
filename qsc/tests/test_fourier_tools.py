@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from qsc.fourier_tools import (fourier_interp1d, fourier_interp2d,
                                fourier_differentiation, fourier_interp1d_regular_grid,
-                               fourier_interp2d_regular_grid)
+                               fourier_interp2d_regular_grid, fourier_coeffs)
     
 def test_fourier_interp():
     """ 1D fourier interpolation """
@@ -301,6 +301,58 @@ def test_fourier_differentiation():
     plt.legend(loc='upper right')
     plt.show()
 
+
+def test_fourier_coeffs():
+    """ Test the fourier_coeffs method. """
+
+    """
+    Test coefficients are correct with even order
+    """
+    period = 2 * torch.pi * 5.234
+    cos_coeffs = torch.tensor([1.09, 3.82, 0.77896, 0.0, 8.0])
+    sin_coeffs = torch.tensor([0.0, -2.3, 0.0, 4.5, 0.0])
+    order = len(cos_coeffs) - 1
+    n = 2 * order + 1
+    x = torch.tensor(np.linspace(0, period, n, endpoint=False))
+    fx = 0
+    for k in range(len(cos_coeffs)):
+        # periodic function
+        fx += cos_coeffs[k] * torch.cos(2 * torch.pi * k * x / period) + sin_coeffs[k] * torch.sin(2 * torch.pi * k * x / period)
+    ak,bk = fourier_coeffs(fx)
+
+    # interpolation error
+    err = torch.max(torch.abs(ak - cos_coeffs))
+    print('Error in cos modes', err)
+    assert err < 1e-14, "fourier_coeffs failed"
+    err = torch.max(torch.abs(bk - sin_coeffs))
+    print('Error in sin modes', err)
+    assert err < 1e-14, "fourier_coeffs failed"
+
+    """
+    Test coefficients are correct with odd order
+    """
+    period = torch.pi / 7.3214
+    cos_coeffs = torch.tensor([1.09, 7.11, -3.1, 0.88])
+    sin_coeffs = torch.tensor([0.0, -2.3, 0.0, -0.91])
+    order = len(cos_coeffs) - 1
+    n = 2 * order + 1
+    x = torch.tensor(np.linspace(0, period, n, endpoint=False))
+    fx = 0
+    for k in range(len(cos_coeffs)):
+        # periodic function
+        fx += cos_coeffs[k] * torch.cos(2 * torch.pi * k * x / period) + sin_coeffs[k] * torch.sin(2 * torch.pi * k * x / period)
+    ak,bk = fourier_coeffs(fx)
+
+    # interpolation error
+    err = torch.max(torch.abs(ak - cos_coeffs))
+    print('Error in cos modes', err)
+    assert err < 1e-14, "fourier_coeffs failed"
+    err = torch.max(torch.abs(bk - sin_coeffs))
+    print('Error in sin modes', err)
+    assert err < 1e-14, "fourier_coeffs failed"
+
+
+
 if __name__ == "__main__":
     test_fourier_interp()
     test_fourier_interp2d()
@@ -308,3 +360,4 @@ if __name__ == "__main__":
     test_fourier_interp2d_regular_grid()
     test_fourier_interp2d_regular_grid_multioutput()
     test_fourier_differentiation()
+    test_fourier_coeffs()
