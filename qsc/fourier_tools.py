@@ -28,7 +28,7 @@ def fourier_interp1d(fx, points, period = 1.0):
 def fourier_coeffs(fx):
     """Compute the Fourier coefficients of a periodic function given
     uniformly spaced evaluations, i.e. ak and bk in
-    f(x) = a0/2 + sum_{k=1}^{infty} [ ak cos(2 pi k x / period) + bk sin(2 pi k x / period) ]
+    f(x) = sum_{k=0}^{infty} a[k] cos(2 pi k x / period) + b[k] sin(2 pi k x / period)
     
     Args:
         fx (array): uniformly spaced evaluations of f(x) on [0, period). Make sure
