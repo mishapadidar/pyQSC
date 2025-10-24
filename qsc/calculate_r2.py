@@ -245,8 +245,8 @@ def calculate_r2_vac(self):
     G0 = torch.clone(self.G0)
     B0_over_abs_G0 = B0 / torch.abs(G0)
     abs_G0_over_B0 = 1 / B0_over_abs_G0
-    X1c = torch.clone(self.X1c)
-    Y1s = torch.clone(self.Y1s)
+    X1c = torch.clone(self.X1c_vac)
+    Y1s = torch.clone(self.Y1s_vac)
     Y1c = torch.clone(self.Y1c_vac) # use vacuum value
     sigma = torch.clone(self.sigma_vac) # use vacuum value
     d_d_varphi = torch.clone(self.d_d_varphi)
