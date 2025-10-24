@@ -225,7 +225,7 @@ def total_derivative(self, loss):
 
     return dloss_by_ddofs
 
-def surface_integral(self, X, r):
+def surface_integral(self, X, r, vacuum_component=False):
     """Take the surface integral of a function X(r, theta, phi),
         I = int X(r, theta, phi) * dA.
     The surface integral is taken over one field period using the Trapezoidal rule
@@ -236,6 +236,8 @@ def surface_integral(self, X, r):
             It is assumed that the points are uniformly spaced in phi (not varphi)
             and theta.
         r (float): radius of flux surface
+        vacuum_component (bool): if True, the area element of the vacuum surface (p2=I2=0)
+            is used. Default False.
 
     Returns:
         (tensor): (1,) tensor of the integral value.
@@ -244,6 +246,6 @@ def surface_integral(self, X, r):
     assert nphi == self.nphi, f"X.shape[0] = {nphi} does not match nphi = {self.nphi}"
     dphi = 2 * torch.pi / self.nfp / nphi
     dtheta = 2 * torch.pi / ntheta
-    dA = self.surface_area_element(r=r, ntheta=ntheta) *  self.d_varphi_d_phi[:, None] # (nphi, ntheta)
+    dA = self.surface_area_element(r=r, ntheta=ntheta, vacuum_component=vacuum_component) *  self.d_varphi_d_phi[:, None] # (nphi, ntheta)
     integral = self.nfp * torch.sum(X * dA * dphi * dtheta)  # scalar tensor
     return integral

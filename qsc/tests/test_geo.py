@@ -10,14 +10,15 @@ from unittest.mock import patch
 def test_load_components():
     """Test the _load_components method of Qsc."""
 
-    names = ["2022 QH nfp3 beta", "precise QA"]
+    names = ["2022 QH nfp3 beta", "precise QA", "precise QH"]
     for name in names:
-        stel = Qsc.from_paper(name, order='r3')
+        stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
 
-        variables = ['X1c','Y1c','X1s','Y1s',
-                    'X20','Y20','Z20','X2c','Y2c','Z2c','X2s','Y2s','Z2s',
-                    'X3c1','X3s1','X3c3','X3s3','Y3c1','Y3s1','Y3c3','Y3s3','Z3c1','Z3s1','Z3c3','Z3s3'
-                    ]
+        variables = ['X1c','Y1c','X1s','Y1s']
+        if stel.order == 'r2':
+            variables += ['X20','Y20','Z20','X2c','Y2c','Z2c','X2s','Y2s','Z2s']
+        if stel.order == 'r3':
+                variables += ['X3c1','X3s1','X3c3','X3s3','Y3c1','Y3s1','Y3c3','Y3s3','Z3c1','Z3s1','Z3c3','Z3s3']
 
         # test with vacuum_component = True
         components = stel._load_components(vacuum_component=True)
@@ -29,8 +30,6 @@ def test_load_components():
         for v in variables:
             assert torch.allclose(getattr(components, v+'_untwisted'), getattr(stel, v+'_untwisted'), atol=1e-15), f"{v} component mismatch"
 
-
-
 def test_surface():
     """
     Test the accuracy of the surface computation
@@ -40,19 +39,28 @@ def test_surface():
 
     minor_radius = 0.1
     ntheta = 16
-    X,Y,Z,R = stel.get_boundary(r=minor_radius, ntheta=ntheta, nphi = stel.nphi, ntheta_fourier=256, mpol=25, ntor=25) # (nphi, ntheta)
-    xyz = stel.surface(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    dxyz_by_dvarphi = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    dxyz_by_dtheta = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    normal = stel.surface_normal(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
 
     # sanity check plot
+    X,Y,Z,R = stel.get_boundary(r=minor_radius, ntheta=ntheta, nphi = stel.nphi, ntheta_fourier=256, mpol=25, ntor=25) # (nphi, ntheta)
+    xyz = stel.surface(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     ax = plt.figure().add_subplot(projection='3d')
     ax.plot_wireframe(xyz[:,:,0], xyz[:,:,1], xyz[:,:,2], alpha=0.2) # ours
-    # ax.quiver(xyz[:,:,0], xyz[:,:,1], xyz[:,:,2], normal[:,:,0], normal[:,:,1], normal[:,:,2], alpha=0.2) # ours
-
     ax.plot_wireframe(X, Y, Z, alpha=0.2, color='orange') # qsc
     plt.show()
+
+    # test the vacuum_component=True argument
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+        xyz_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        xyz_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        xyz_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(xyz_stel_vac, xyz_vac_stel_vac, atol=1e-14), "Vacuum surface mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(xyz_vac_stel, xyz_stel_vac, atol=1e-14), "Vacuum surface mismatch between nonvac and vac case"
 
 def test_surface_tangents():
     # set up the expansion
@@ -102,8 +110,47 @@ def test_surface_tangents():
     print(err)
     assert err < 1e-4, "dsurface_by_dvarphi incorrect"
 
+    # test the vacuum_component=True argument
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+
+        dxyz_by_dvarphi_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dvarphi_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        dxyz_by_dvarphi_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(dxyz_by_dvarphi_stel_vac, dxyz_by_dvarphi_vac_stel_vac, atol=1e-14), "Vacuum dsurface_by_dvarphi mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(dxyz_by_dvarphi_vac_stel, dxyz_by_dvarphi_stel_vac, atol=1e-14), "Vacuum dsurface_by_dvarphi mismatch between nonvac and vac case"
+
+        dxyz_by_dtheta_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dtheta_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        dxyz_by_dtheta_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(dxyz_by_dtheta_stel_vac, dxyz_by_dtheta_vac_stel_vac, atol=1e-14), "Vacuum dsurface_by_dtheta mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(dxyz_by_dtheta_vac_stel, dxyz_by_dtheta_stel_vac, atol=1e-14), "Vacuum dsurface_by_dtheta mismatch between nonvac and vac case"
+
+        dxyz_by_dr_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dr_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        dxyz_by_dr_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(dxyz_by_dr_stel_vac, dxyz_by_dr_vac_stel_vac, atol=1e-14), "Vacuum dsurface_by_dr mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(dxyz_by_dr_vac_stel, dxyz_by_dr_stel_vac, atol=1e-14), "Vacuum dsurface_by_dr mismatch between nonvac and vac case"
+
+        normal_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        normal_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        normal_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(normal_stel_vac, normal_vac_stel_vac, atol=1e-14), "Vacuum normal mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(normal_vac_stel, normal_stel_vac, atol=1e-14), "Vacuum normal mismatch between nonvac and vac case"
+
+
 def test_second_derivative():
-    """ Test the accuracy of the second derivative of the surface."""
+    """ Test the accuracy of the d2surface_by_dthetatheta()."""
     # set up the expansion
     stel = Qsc.from_paper("precise QA", nphi=513, order='r3')
 
@@ -119,124 +166,121 @@ def test_second_derivative():
     print(err)
     assert err < 1e-4, "d2surface_by_dthetatheta incorrect"
 
-def test_surface_nonvac():
-    """
-    Test the accuracy of the nonvacuum surface computation
-    """
-    # set up the expansion
-    stel = Qsc.from_paper("precise QA", I2 = 10, order='r1')
+    # test the vacuum_component=True argument
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
 
-    minor_radius = 0.1
-    ntheta = 16
-    surface = stel.surface(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    surface_nonvac = stel.surface_nonvac(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    surface_vac = surface - surface_nonvac
-
-    # sanity check plot
-    ax = plt.figure().add_subplot(projection='3d')
-    ax.plot_wireframe(surface[:,:,0], surface[:,:,1], surface[:,:,2], alpha=0.2) # ours
-    ax.plot_wireframe(surface_nonvac[:,:,0], surface_nonvac[:,:,1], surface_nonvac[:,:,2], alpha=0.2) # ours
-    plt.show()
+        d2theta_vac_stel = stel.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        d2theta_stel_vac = stel_vac.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        d2theta_vac_stel_vac = stel_vac.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(d2theta_stel_vac, d2theta_vac_stel_vac, atol=1e-14), "d2surface_by_dthetatheta mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(d2theta_vac_stel, d2theta_stel_vac, atol=1e-14), "Vacuum d2surface_by_dthetatheta mismatch between nonvac and vac case"
 
 def test_surface_autodiff():
     """
-    Test autodifferentation of surface
+    Test autodifferentation of surface().
     """
     ntheta = 256
     r = 0.1
     
-    stel = Qsc.from_paper("precise QA", nphi=31, I2=10.0, p2=-1e6, order='r2')
+    for vacuum_component in [True, False]:
+        stel = Qsc.from_paper("precise QA", nphi=61, I2=0.1, p2=-1e5, order='r3')
 
-    surface = stel.surface(r=r, ntheta=ntheta) # (3, nphi)
-    loss = torch.mean(surface**2)
+        surface = stel.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+        loss = torch.mean(surface**2)
 
-    # compute the gradient using autodiff
-    dloss_by_ddofs = stel.total_derivative(loss) # list
-    dloss_by_drc = dloss_by_ddofs[0]
-    dloss_by_dzs = dloss_by_ddofs[1]
-    dloss_by_detabar = dloss_by_ddofs[4]
+        # compute the gradient using autodiff
+        dloss_by_ddofs = stel.total_derivative(loss) # list
+        dloss_by_drc = dloss_by_ddofs[0]
+        dloss_by_dzs = dloss_by_ddofs[1]
+        dloss_by_detabar = dloss_by_ddofs[4]
 
-    # check rc gradient with finite difference
-    def fd_obj(x):
-        stel.rc.data = x
-        stel.calculate()
-        surface = stel.surface(r=r, ntheta=ntheta) # (3, nphi)
-        return torch.mean(surface**2)
-    dloss_by_drc_fd = finite_difference_torch(fd_obj, torch.clone(stel.rc.detach()), 1e-8)
-    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
-    assert err.item() < 1e-5, f"dloss/drc finite difference check failed: {err.item()}"
+        # check rc gradient with finite difference
+        def fd_obj(x):
+            stel.rc.data = x
+            stel.calculate()
+            surface = stel.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+            return torch.mean(surface**2)
+        dloss_by_drc_fd = finite_difference_torch(fd_obj, torch.clone(stel.rc.detach()), 1e-8)
+        err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+        assert err.item() < 1e-5, f"dloss/drc finite difference check failed: {err.item()}"
 
-    # check zs gradient with finite difference
-    def fd_obj(x):
-        stel.zs.data = x
-        stel.calculate()
-        surface = stel.surface(r=r, ntheta=ntheta) # (3, nphi)
-        return torch.mean(surface**2)
-    dloss_by_dzs_fd = finite_difference_torch(fd_obj, torch.clone(stel.zs.detach()), 1e-7)
-    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
-    assert err.item() < 1e-5, f"dloss/dzs finite difference check failed: {err.item()}"
+        # check zs gradient with finite difference
+        def fd_obj(x):
+            stel.zs.data = x
+            stel.calculate()
+            surface = stel.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+            return torch.mean(surface**2)
+        dloss_by_dzs_fd = finite_difference_torch(fd_obj, torch.clone(stel.zs.detach()), 1e-7)
+        err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+        assert err.item() < 1e-5, f"dloss/dzs finite difference check failed: {err.item()}"
 
-    # check etabar gradient with finite difference
-    def fd_obj(x):
-        stel.etabar.data = x
-        stel.calculate()
-        surface = stel.surface(r=r, ntheta=ntheta) # (3, nphi)
-        return torch.mean(surface**2)
-    dloss_by_detabar_fd = finite_difference_torch(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
-    err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
-    assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
+        # check etabar gradient with finite difference
+        def fd_obj(x):
+            stel.etabar.data = x
+            stel.calculate()
+            surface = stel.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+            return torch.mean(surface**2)
+        dloss_by_detabar_fd = finite_difference_torch(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+        err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
+        assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
 
 
 def test_normal_autodiff():
     """
-    Test autodifferentation of normal
+    Test autodifferentation of normal().
     """
     ntheta = 256
     r = 0.1
     
-    stel = Qsc.from_paper("precise QA", nphi=31, I2=10.0, p2=-1e4, order='r2')
+    stel = Qsc.from_paper("precise QA", nphi=61, I2=0.1, p2=-1e4, order='r3')
 
-    normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
-    loss = torch.mean(normal**2)/100
+    for vacuum_component in [True, False]:
+        normal = stel.surface_normal(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+        loss = torch.mean(normal**2)/100
 
-    # compute the gradient using autodiff
-    dloss_by_ddofs = stel.total_derivative(loss) # list
-    dloss_by_drc = dloss_by_ddofs[0]
-    dloss_by_dzs = dloss_by_ddofs[1]
-    dloss_by_detabar = dloss_by_ddofs[4]
+        # compute the gradient using autodiff
+        dloss_by_ddofs = stel.total_derivative(loss) # list
+        dloss_by_drc = dloss_by_ddofs[0]
+        dloss_by_dzs = dloss_by_ddofs[1]
+        dloss_by_detabar = dloss_by_ddofs[4]
 
-    # check rc gradient with finite difference
-    def fd_obj(x):
-        stel.rc.data = x
-        stel.calculate()
-        normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
-        return torch.mean(normal**2)/100
-    dloss_by_drc_fd = finite_difference_torch(fd_obj, torch.clone(stel.rc.detach()), 1e-8)
-    err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
-    assert err.item() < 1e-4, f"dloss/drc finite difference check failed: {err.item()}"
+        # check rc gradient with finite difference
+        def fd_obj(x):
+            stel.rc.data = x
+            stel.calculate()
+            normal = stel.surface_normal(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+            return torch.mean(normal**2)/100
+        dloss_by_drc_fd = finite_difference_torch(fd_obj, torch.clone(stel.rc.detach()), 1e-8)
+        err = torch.max(torch.abs(dloss_by_drc - dloss_by_drc_fd))
+        assert err.item() < 1e-4, f"dloss/drc finite difference check failed: {err.item()}"
 
-    # check zs gradient with finite difference
-    def fd_obj(x):
-        stel.zs.data = x
-        stel.calculate()
-        normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
-        return torch.mean(normal**2)/100
-    dloss_by_dzs_fd = finite_difference_torch(fd_obj, torch.clone(stel.zs.detach()), 1e-8)
-    err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
-    assert err.item() < 1e-4, f"dloss/dzs finite difference check failed: {err.item()}"
+        # check zs gradient with finite difference
+        def fd_obj(x):
+            stel.zs.data = x
+            stel.calculate()
+            normal = stel.surface_normal(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+            return torch.mean(normal**2)/100
+        dloss_by_dzs_fd = finite_difference_torch(fd_obj, torch.clone(stel.zs.detach()), 1e-8)
+        err = torch.max(torch.abs(dloss_by_dzs - dloss_by_dzs_fd))
+        assert err.item() < 1e-4, f"dloss/dzs finite difference check failed: {err.item()}"
 
-    # check etabar gradient with finite difference
-    def fd_obj(x):
-        stel.etabar.data = x
-        stel.calculate()
-        normal = stel.surface_normal(r=r, ntheta=ntheta) # (3, nphi)
-        return torch.mean(normal**2)/100
-    dloss_by_detabar_fd = finite_difference_torch(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
-    err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
-    assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
+        # check etabar gradient with finite difference
+        def fd_obj(x):
+            stel.etabar.data = x
+            stel.calculate()
+            normal = stel.surface_normal(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (3, nphi)
+            return torch.mean(normal**2)/100
+        dloss_by_detabar_fd = finite_difference_torch(fd_obj, torch.clone(torch.tensor([stel.etabar.detach()])), 1e-6)
+        err = torch.abs(dloss_by_detabar - dloss_by_detabar_fd)
+        assert err.item() < 1e-5, f"dloss/detabar finite difference check failed: {err.item()}"
 
 def test_surface_area():
-    """ Test surface area computation """
+    """ Test surface_area() computation """
 
     # test the area of a torus with major radius R and minor radius r
     R = 1.0
@@ -253,6 +297,21 @@ def test_surface_area():
         area = stel.surface_area(r=r, ntheta=ntheta).item()
         assert abs(area - area_actual) < 1e-15, f"Surface area incorrect: {area}"
         mock_method.assert_called_once()
+
+    # test the vacuum_component=True argument
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+
+        area_vac_stel = stel.surface_area(r=r, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        area_stel_vac = stel_vac.surface_area(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+        area_vac_stel_vac = stel_vac.surface_area(r=r, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(area_stel_vac, area_vac_stel_vac, atol=1e-14), "surface_area mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(area_vac_stel, area_stel_vac, atol=1e-14), "Vacuum surface_area mismatch between nonvac and vac case"
+
 
 def test_surface_curvature():
     """ Test surface curvature computation """
@@ -276,13 +335,28 @@ def test_surface_curvature():
     err = np.max(rel_err)
     assert err < 1e-14, f"Surface curvature incorrect: {err}"
 
+    # test the vacuum_component=True argument
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+
+        curv_vac_stel = stel.surface_theta_curvature(r=r, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        curv_stel_vac = stel_vac.surface_theta_curvature(r=r, ntheta=ntheta) # (nphi, ntheta, 3)
+        curv_vac_stel_vac = stel_vac.surface_theta_curvature(r=r, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        # in vacuum, total vacuum solution and vacuum components should match
+        assert torch.allclose(curv_stel_vac, curv_vac_stel_vac, atol=1e-14), "surface_theta_curvature mismatch in vacuum case"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(curv_vac_stel, curv_stel_vac, atol=1e-14), "Vacuum surface_theta_curvature mismatch between nonvac and vac case"
+
+
+
 
 if __name__ == "__main__":
     test_load_components()
     test_surface()
     test_surface_tangents()
     test_second_derivative()
-    test_surface_nonvac()
     test_surface_autodiff()
     test_normal_autodiff()
     test_surface_area()
