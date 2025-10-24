@@ -72,17 +72,6 @@ def test_surface_tangents():
     dxyz_by_dvarphi = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     dxyz_by_dtheta = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
     dxyz_by_dr = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    normal = stel.surface_normal(r=minor_radius, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
-    
-    # test normal is orthogonal to tangent
-    err = np.max(np.abs(np.sum(normal * dxyz_by_dtheta,axis=-1)))
-    print(err)
-    assert err < 1e-4, "normal not orthogonal to theta tangent"
-
-    # test normal is orthogonal to tangent
-    err = np.max(np.abs(np.sum(normal * dxyz_by_dvarphi,axis=-1)))
-    print(err)
-    assert err < 1e-4, "normal not orthogonal to varphi tangent"
 
     # test dsurface_by_dtheta with central differences
     dtheta = 2 * np.pi / ntheta
@@ -91,7 +80,6 @@ def test_surface_tangents():
     print(err)
     assert err < 1e-4, "dsurface_by_dtheta incorrect"
 
-    
     # test dsurface_by_dr with central differences
     dr = 1e-3
     xyz_pdr = stel.surface(r=minor_radius + dr, ntheta=ntheta).detach().numpy() # (nphi, ntheta, 3)
@@ -140,13 +128,52 @@ def test_surface_tangents():
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(dxyz_by_dr_vac_stel, dxyz_by_dr_stel_vac, atol=1e-14), "Vacuum dsurface_by_dr mismatch between nonvac and vac case"
 
-        normal_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
-        normal_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
-        normal_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
-        # in vacuum, total vacuum solution and vacuum components should match
-        assert torch.allclose(normal_stel_vac, normal_vac_stel_vac, atol=1e-14), "Vacuum normal mismatch in vacuum case"
-        # vacuum component of nonvac field should match the total vacuum solution
-        assert torch.allclose(normal_vac_stel, normal_stel_vac, atol=1e-14), "Vacuum normal mismatch between nonvac and vac case"
+def test_surface_normal():
+    """Test the surface_normal method."""
+
+    minor_radius = 0.1
+    ntheta=32
+    # test the vacuum_component=True argument
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        # test the vacuum_component=True argument
+        names = ["precise QH", "precise QA"]
+        for name in names:
+            stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+            stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+
+            normal_stel = stel.surface_normal(r=minor_radius, ntheta=ntheta, vacuum_component=False) # (nphi, ntheta, 3)
+            normal_vac_stel = stel.surface_normal(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+            normal_stel_vac = stel_vac.surface_normal(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+            normal_vac_stel_vac = stel_vac.surface_normal(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+            # in vacuum, total vacuum solution and vacuum components should match
+            assert torch.allclose(normal_stel_vac, normal_vac_stel_vac, atol=1e-14), "Vacuum normal mismatch in vacuum case"
+            # vacuum component of nonvac field should match the total vacuum solution
+            assert torch.allclose(normal_vac_stel, normal_stel_vac, atol=1e-14), "Vacuum normal mismatch between nonvac and vac case"
+
+            # test normal is orthogonal to tangent
+            dxyz_by_dtheta = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+            err = torch.max(torch.abs(torch.sum(normal_stel * dxyz_by_dtheta,axis=-1)))
+            print(err.detach().numpy())
+            assert err < 1e-14, "normal not orthogonal to theta tangent"
+
+            # test normal is orthogonal to tangent
+            dxyz_by_dvarphi = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+            err = torch.max(torch.abs(torch.sum(normal_stel * dxyz_by_dvarphi,axis=-1)))
+            print(err.detach().numpy())
+            assert err < 1e-14, "normal not orthogonal to varphi tangent"
+
+            # test vacuum normal is orthogonal to vacuum tangent
+            dxyz_by_dtheta = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+            err = torch.max(torch.abs(torch.sum(normal_vac_stel * dxyz_by_dtheta,axis=-1)))
+            print(err.detach().numpy())
+            assert err < 1e-14, "vacuum normal not orthogonal to vacuum theta tangent"
+
+            # test vacuum normal is orthogonal to vacuum tangent
+            dxyz_by_dvarphi = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+            err = torch.max(torch.abs(torch.sum(normal_vac_stel * dxyz_by_dvarphi,axis=-1)))
+            print(err.detach().numpy())
+            assert err < 1e-14, "vacuum normal not orthogonal to vacuum varphi tangent"
 
 
 def test_second_derivative():
@@ -356,6 +383,7 @@ if __name__ == "__main__":
     test_load_components()
     test_surface()
     test_surface_tangents()
+    test_surface_normal()
     test_second_derivative()
     test_surface_autodiff()
     test_normal_autodiff()
