@@ -53,7 +53,7 @@ class Qsc(torch.nn.Module):
                                  curl_taylor, divergence_taylor,
                                  )
     from .configurations import from_paper, configurations
-    from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, total_derivative,
+    from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, grad_grad_B_tensor_cartesian_mse, total_derivative,
                              B_external_on_axis_mse, downsample_axis, subsample_axis_nodes, grad_B_external_on_axis_mse,
                              surface_integral)
     from .from_vmec import from_vmec

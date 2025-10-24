@@ -47,6 +47,25 @@ def grad_B_tensor_cartesian_mse(self, gradB_target):
     loss = 0.5 * torch.sum(torch.sum((gradB - gradB_target)**2, dim=(0,1)) * dl) # scalar tensor
     return loss
 
+def grad_grad_B_tensor_cartesian_mse(self, grad_grad_B_target):
+    '''
+    Integrated mean-squared error between the second derivative tensor
+    of the Cartesian magnetic field on axis and a target magnetic field over the magnetic axis,
+            Loss = (1/2) int |grad_grad_B - grad_gradB_target|**2 dl
+
+    Args:
+        gradB_target (tensor): (3, 3, nphi) tensor of target the gradient field values.
+
+    Return:
+        loss (tensor): float tensor of the objective value.
+    '''
+    grad_grad_B = self.grad_grad_B_tensor_cartesian() # (3, 3, 3, nphi)
+    dphi = np.diff(self.phi)[0]
+    d_l_d_phi = self.d_l_d_phi
+    dl = d_l_d_phi * dphi # (nphi,)
+    loss = 0.5 * torch.sum(torch.sum((grad_grad_B - grad_grad_B_target)**2, dim=(0,1,2)) * dl) # scalar tensor
+    return loss
+
 def downsample_axis(self, nphi):
     """This convenience function computes the Cartesian axis coordinates and derivatives of the
     arc length at evenly spaced (in phi) points along the magnetic axis.
