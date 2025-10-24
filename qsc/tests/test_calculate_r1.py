@@ -8,26 +8,28 @@ from qsc.util import finite_difference_torch
 
 def test_r1_diagnostics():
 
-    stel = Qsc.from_paper("precise QA", I2 = 100.0, order='r1')
-    stel_vac = Qsc.from_paper("precise QA", I2 = 0.0, order='r1')
+    names = ["precise QH", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, I2 = 1.0, order='r1')
+        stel_vac = Qsc.from_paper(name, I2 = 0.0, order='r1')
 
-    # total vacuum solution and vacuum components should match
-    assert torch.allclose(stel_vac.X1c, stel_vac.X1c_vac, atol=1e-14), "X1c or X1c_vac incorect in vacuum"
-    assert torch.allclose(stel_vac.X1s, stel_vac.X1s_vac, atol=1e-14), "X1s or X1s_vac incorect in vacuum"
-    assert torch.allclose(stel_vac.Y1s, stel_vac.Y1s_vac, atol=1e-14), "Y1s or Y1s_vac incorect in vacuum"
-    assert torch.allclose(stel_vac.Y1c, stel_vac.Y1c_vac, atol=1e-14), "Y1c or Y1c_vac incorect in vacuum"
-    assert torch.allclose(stel_vac.Y1c_untwisted, stel_vac.Y1c_vac_untwisted, atol=1e-14), "Y1c_untwisted or Y1c_vac_untwisted incorect in vacuum"
-    assert torch.allclose(stel_vac.sigma, stel_vac.sigma_vac, atol=1e-14), "sigma or sigma_vac incorect in vacuum"
-    assert torch.allclose(stel_vac.iota, stel_vac.iota_vac, atol=1e-14), "iota or iota_vac incorect in vacuum"
+        # total vacuum solution and vacuum components should match
+        assert torch.allclose(stel_vac.X1c, stel_vac.X1c_vac, atol=1e-14), "X1c or X1c_vac incorect in vacuum"
+        assert torch.allclose(stel_vac.X1s, stel_vac.X1s_vac, atol=1e-14), "X1s or X1s_vac incorect in vacuum"
+        assert torch.allclose(stel_vac.Y1s, stel_vac.Y1s_vac, atol=1e-14), "Y1s or Y1s_vac incorect in vacuum"
+        assert torch.allclose(stel_vac.Y1c, stel_vac.Y1c_vac, atol=1e-14), "Y1c or Y1c_vac incorect in vacuum"
+        assert torch.allclose(stel_vac.Y1c_untwisted, stel_vac.Y1c_vac_untwisted, atol=1e-14), "Y1c_untwisted or Y1c_vac_untwisted incorect in vacuum"
+        assert torch.allclose(stel_vac.sigma, stel_vac.sigma_vac, atol=1e-14), "sigma or sigma_vac incorect in vacuum"
+        assert torch.allclose(stel_vac.iota, stel_vac.iota_vac, atol=1e-14), "iota or iota_vac incorect in vacuum"
 
-    # vacuum component of nonvac field should match the total vacuum solution
-    assert torch.allclose(stel_vac.X1c, stel.X1c_vac, atol=1e-14), "X1c or X1c_vac incorect"
-    assert torch.allclose(stel_vac.X1s, stel.X1s_vac, atol=1e-14), "X1s or X1s_vac incorect"
-    assert torch.allclose(stel_vac.Y1s, stel.Y1s_vac, atol=1e-14), "Y1s or Y1s_vac incorect"
-    assert torch.allclose(stel_vac.Y1c, stel.Y1c_vac, atol=1e-14), "Y1c or Y1c_vac incorect"
-    assert torch.allclose(stel_vac.Y1c_untwisted, stel.Y1c_vac_untwisted, atol=1e-14), "Y1c_untwisted or Y1c_vac_untwisted incorect"
-    assert torch.allclose(stel_vac.sigma, stel.sigma_vac, atol=1e-14), "sigma or sigma_vac incorect"
-    assert torch.allclose(stel_vac.iota, stel.iota_vac, atol=1e-14), "iota or iota_vac incorect"
+        # vacuum component of nonvac field should match the total vacuum solution
+        assert torch.allclose(stel_vac.X1c, stel.X1c_vac, atol=1e-14), "X1c or X1c_vac incorect"
+        assert torch.allclose(stel_vac.X1s, stel.X1s_vac, atol=1e-14), "X1s or X1s_vac incorect"
+        assert torch.allclose(stel_vac.Y1s, stel.Y1s_vac, atol=1e-14), "Y1s or Y1s_vac incorect"
+        assert torch.allclose(stel_vac.Y1c, stel.Y1c_vac, atol=1e-14), "Y1c or Y1c_vac incorect"
+        assert torch.allclose(stel_vac.Y1c_untwisted, stel.Y1c_vac_untwisted, atol=1e-14), "Y1c_untwisted or Y1c_vac_untwisted incorect"
+        assert torch.allclose(stel_vac.sigma, stel.sigma_vac, atol=1e-14), "sigma or sigma_vac incorect"
+        assert torch.allclose(stel_vac.iota, stel.iota_vac, atol=1e-14), "iota or iota_vac incorect"
 
     print('PASSED: test_r1_diagnostics')
 
