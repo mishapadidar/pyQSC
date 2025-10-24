@@ -7,6 +7,28 @@ from scipy.interpolate import CubicSpline
 from qsc.util import finite_difference_torch
 from unittest.mock import patch
 
+def test_load_components():
+    """Test the _load_components method of Qsc."""
+
+    names = ["2022 QH nfp3 beta", "precise QA"]
+    for name in names:
+        stel = Qsc.from_paper(name, order='r3')
+
+        variables = ['X1c','Y1c','X1s','Y1s',
+                    'X20','Y20','Z20','X2c','Y2c','Z2c','X2s','Y2s','Z2s',
+                    'X3c1','X3s1','X3c3','X3s3','Y3c1','Y3s1','Y3c3','Y3s3','Z3c1','Z3s1','Z3c3','Z3s3'
+                    ]
+
+        # test with vacuum_component = True
+        components = stel._load_components(vacuum_component=True)
+        for v in variables:
+            assert torch.allclose(getattr(components, v+'_untwisted'), getattr(stel, v+'_vac_untwisted'), atol=1e-15), f"{v} vacuum component mismatch"
+
+        # test with vacuum_component = False
+        components = stel._load_components(vacuum_component=False)
+        for v in variables:
+            assert torch.allclose(getattr(components, v+'_untwisted'), getattr(stel, v+'_untwisted'), atol=1e-15), f"{v} component mismatch"
+
 
 
 def test_surface():
@@ -256,6 +278,7 @@ def test_surface_curvature():
 
 
 if __name__ == "__main__":
+    test_load_components()
     test_surface()
     test_surface_tangents()
     test_second_derivative()

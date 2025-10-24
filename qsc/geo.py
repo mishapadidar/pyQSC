@@ -7,10 +7,76 @@ Methods for computing the flux surface geometry
 import logging
 import numpy as np
 import torch
-from .util import rotate_nfp
+from .util import rotate_nfp, Struct
 
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def _load_components(self, vacuum_component=False):
+    """Build a Struct object with the untwisted Fourier components of the flux
+    surface shape, X1c_untwisted, X1s_untwisted, etc as attributes. If vacuum_component
+    the vacuum components X1c_untwisted_vac, X1s_untwisted_vac, etc are set instead, though
+    they are still accessed without the _vac suffix.
+
+    Example:
+        components = self._load_components()
+        X20_untwisted = components.X20_untwisted
+        components_vac = self._load_components(vacuum_component = True)
+        X2c_untwisted = components.X2c_untwisted
+
+    Args:
+        vacuum_component (bool): if True, the vacuum components X1c_untwisted, X1s_untwisted, etc
+        are set at attributes instead. Default False.
+
+    Returns:
+        Struct: a struct with attributes X1c_untwisted, Y1c_untwisted, etc.
+    """
+    
+    variables = ['X1c',
+                 'Y1c',
+                 'X1s',
+                 'Y1s',
+                 ]
+
+    if self.order != 'r1':
+        variables += ['X20',
+                      'Y20',
+                      'Z20',
+                      'X2c',
+                      'Y2c',
+                      'Z2c',
+                      'X2s',
+                      'Y2s',
+                      'Z2s'
+                      ]
+        if self.order == 'r3':
+                variables += ['X3c1',
+                              'X3s1',
+                              'X3c3',
+                              'X3s3',
+                              'Y3c1',
+                              'Y3s1',
+                              'Y3c3',
+                              'Y3s3',
+                              'Z3c1',
+                              'Z3s1',
+                              'Z3c3',
+                              'Z3s3'
+                              ]
+
+    if vacuum_component:
+        suffix = '_vac_untwisted'
+    else:
+        suffix = '_untwisted'
+
+    # TODO: does Struct need to be torch?
+    out = Struct
+    for v in variables:
+        # TODO: do we need to torch.clone?
+        s = 'self.'+ v + suffix
+        setattr(out, v + '_untwisted', eval(s))
+
+    return out
 
 def surface(self, r, ntheta=64):
     """Compute points on a flux surface with radius r. The quadrature points are 

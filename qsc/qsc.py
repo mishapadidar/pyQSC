@@ -32,10 +32,10 @@ class Qsc(torch.nn.Module):
         grad_grad_B_tensor_cylindrical, grad_grad_B_tensor_cartesian,
         calculate_grad_B_tensor_vac, calculate_grad_grad_B_tensor_vac)
     from .calculate_r2 import calculate_r2, calculate_r2_vac
-    from .calculate_r3 import calculate_r3, calculate_shear
+    from .calculate_r3 import calculate_r3, calculate_r3_vac, calculate_shear
     from .geo import (surface, dsurface_by_dvarphi, dsurface_by_dtheta,
                       dsurface_by_dr, surface_normal, jacobian, d2surface_by_dthetatheta,
-                      surface_theta_curvature, surface_area, surface_area_element)
+                      surface_theta_curvature, surface_area, surface_area_element, _load_components)
     from .mercier import mercier
     from .r_singularity import calculate_r_singularity
     from .plot import plot, plot_boundary, get_boundary, B_fieldline, B_contour, plot_axis, flux_tube
@@ -165,6 +165,7 @@ class Qsc(torch.nn.Module):
             self.calculate_r2_vac()
             if self.order == 'r3':
                 self.calculate_r3()
+                self.calculate_r3_vac()
         self.clear_cache()
 
     def clear_cache(self):

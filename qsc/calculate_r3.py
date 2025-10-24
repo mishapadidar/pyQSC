@@ -75,15 +75,15 @@ def calculate_r3(self):
     self.Y3c1 = self.Y1c * flux_constraint_coefficient
     self.Y3s1 = self.Y1s * flux_constraint_coefficient
     self.X3s1 = self.X1s * flux_constraint_coefficient
-    self.Z3c1 = 0
-    self.Z3s1 = 0
+    self.Z3c1 = torch.tensor(0)
+    self.Z3s1 = torch.tensor(0)
 
-    self.X3c3 = 0
-    self.X3s3 = 0
-    self.Y3c3 = 0
-    self.Y3s3 = 0
-    self.Z3c3 = 0
-    self.Z3s3 = 0
+    self.X3c3 = torch.tensor(0)
+    self.X3s3 = torch.tensor(0)
+    self.Y3c3 = torch.tensor(0)
+    self.Y3s3 = torch.tensor(0)
+    self.Z3c3 = torch.tensor(0)
+    self.Z3s3 = torch.tensor(0)
 
     self.d_X3c1_d_varphi = torch.matmul(self.d_d_varphi, self.X3c1)
     self.d_Y3c1_d_varphi = torch.matmul(self.d_d_varphi, self.Y3c1)
@@ -144,6 +144,141 @@ def calculate_r3(self):
         self.Y3c3_untwisted = self.Y3s3 * (-sinangle) + self.Y3c3 * cosangle
         self.Z3s3_untwisted = self.Z3s3 *   cosangle  + self.Z3c3 * sinangle
         self.Z3c3_untwisted = self.Z3s3 * (-sinangle) + self.Z3c3 * cosangle
+
+
+def calculate_r3_vac(self):
+    """
+    Compute the vacuum component of the O(r^3) quantities.
+    """
+    logger.debug('Calculating vacuum O(r**3) terms')
+ 
+    # Shorthand
+    sign_psi = self.spsi
+    sign_G   = self.sG
+    G2       = torch.clone(self.G2_vac)
+    iotaN = torch.clone(self.iotaN_vac)
+    N_helicity = torch.clone(self.iota_vac - self.iotaN)
+    B0 = self.B0
+    G0 = torch.clone(self.G0)
+    I2 = 0.0 # no current in vacuum
+    p2 = 0.0 # no pressure gradient in vacuum
+    X1c = torch.clone(self.X1c_vac)
+    X1s = torch.clone(self.X1s_vac)
+    Y1c = torch.clone(self.Y1c_vac)
+    Y1s = torch.clone(self.Y1s_vac)
+    X20 = torch.clone(self.X20_vac)
+    X2s = torch.clone(self.X2s_vac)
+    X2c = torch.clone(self.X2c_vac)
+    Y20 = torch.clone(self.Y20_vac)
+    Y2s = torch.clone(self.Y2s_vac)
+    Y2c = torch.clone(self.Y2c_vac)
+    Z20 = torch.clone(self.Z20_vac)
+    Z2s = torch.clone(self.Z2s_vac)
+    Z2c = torch.clone(self.Z2c_vac)
+    B20 = torch.clone(self.B20_vac)
+    B1c = torch.clone(self.etabar * B0)
+    torsion = torch.clone(self.torsion)
+    curvature = torch.clone(self.curvature)
+    d_d_varphi = torch.clone(self.d_d_varphi)
+    abs_G0_over_B0 = torch.clone(self.abs_G0_over_B0)
+    d_X1c_d_varphi = torch.matmul(d_d_varphi, X1c)
+    d_Y1c_d_varphi = torch.matmul(d_d_varphi, Y1c)
+    d_Z20_d_varphi = torch.matmul(d_d_varphi, Z20)
+
+    # The expression below is computed in "20190305-01 GarrenBoozer r2 corrected radius.nb" in the section "Approach of adding r**3 terms, assuming quasisymmetry"
+    # 20190714: To account for QH cases, changed iota -> iota_N where it occurs 3 lines below:
+    flux_constraint_coefficient = (-4*B0**2*G0*X20**2*Y1c**2 + 8*B0**2*G0*X20*X2c*Y1c**2 - 4*B0**2*G0*X2c**2*Y1c**2 - \
+        4*B0**2*G0*X2s**2*Y1c**2 + 8*B0*G0*B1c*X1c*X2s*Y1c*Y1s + 16*B0**2*G0*X20*X2s*Y1c*Y1s + \
+        2*B0**2*I2*iotaN*X1c**2*Y1s**2 - G0*B1c**2*X1c**2*Y1s**2 - 4*B0*G0*B20*X1c**2*Y1s**2 - \
+        8*B0*G0*B1c*X1c*X20*Y1s**2 - 4*B0**2*G0*X20**2*Y1s**2 - 8*B0*G0*B1c*X1c*X2c*Y1s**2 - \
+        8*B0**2*G0*X20*X2c*Y1s**2 - 4*B0**2*G0*X2c**2*Y1s**2 - 4*B0**2*G0*X2s**2*Y1s**2 + \
+        8*B0**2*G0*X1c*X20*Y1c*Y20 - 8*B0**2*G0*X1c*X2c*Y1c*Y20 - 8*B0**2*G0*X1c*X2s*Y1s*Y20 - \
+        4*B0**2*G0*X1c**2*Y20**2 - 8*B0**2*G0*X1c*X20*Y1c*Y2c + 8*B0**2*G0*X1c*X2c*Y1c*Y2c + \
+        24*B0**2*G0*X1c*X2s*Y1s*Y2c + 8*B0**2*G0*X1c**2*Y20*Y2c - 4*B0**2*G0*X1c**2*Y2c**2 + \
+        8*B0**2*G0*X1c*X2s*Y1c*Y2s - 8*B0*G0*B1c*X1c**2*Y1s*Y2s - 8*B0**2*G0*X1c*X20*Y1s*Y2s - \
+        24*B0**2*G0*X1c*X2c*Y1s*Y2s - 4*B0**2*G0*X1c**2*Y2s**2 - 4*B0**2*G0*X1c**2*Z20**2 - \
+        4*B0**2*G0*Y1c**2*Z20**2 - 4*B0**2*G0*Y1s**2*Z20**2 - 4*B0**2*abs_G0_over_B0*I2*Y1c*Y1s*Z2c + \
+        8*B0**2*G0*X1c**2*Z20*Z2c + 8*B0**2*G0*Y1c**2*Z20*Z2c - 8*B0**2*G0*Y1s**2*Z20*Z2c - \
+        4*B0**2*G0*X1c**2*Z2c**2 - 4*B0**2*G0*Y1c**2*Z2c**2 - 4*B0**2*G0*Y1s**2*Z2c**2 + \
+        2*B0**2*abs_G0_over_B0*I2*X1c**2*Z2s + 2*B0**2*abs_G0_over_B0*I2*Y1c**2*Z2s - 2*B0**2*abs_G0_over_B0*I2*Y1s**2*Z2s + \
+        16*B0**2*G0*Y1c*Y1s*Z20*Z2s - 4*B0**2*G0*X1c**2*Z2s**2 - 4*B0**2*G0*Y1c**2*Z2s**2 - \
+        4*B0**2*G0*Y1s**2*Z2s**2 + B0**2*abs_G0_over_B0*I2*X1c**3*Y1s*torsion + B0**2*abs_G0_over_B0*I2*X1c*Y1c**2*Y1s*torsion + \
+        B0**2*abs_G0_over_B0*I2*X1c*Y1s**3*torsion - B0**2*I2*X1c*Y1c*Y1s*d_X1c_d_varphi + \
+        B0**2*I2*X1c**2*Y1s*d_Y1c_d_varphi)/(16*B0**2*G0*X1c**2*Y1s**2)
+
+    self.X3c1_vac = X1c * flux_constraint_coefficient
+    self.Y3c1_vac = Y1c * flux_constraint_coefficient
+    self.Y3s1_vac = Y1s * flux_constraint_coefficient
+    self.X3s1_vac = X1s * flux_constraint_coefficient
+    self.Z3c1_vac = torch.tensor(0)
+    self.Z3s1_vac = torch.tensor(0)
+
+    self.X3c3_vac = torch.tensor(0)
+    self.X3s3_vac = torch.tensor(0)
+    self.Y3c3_vac = torch.tensor(0)
+    self.Y3s3_vac = torch.tensor(0)
+    self.Z3c3_vac = torch.tensor(0)
+    self.Z3s3_vac = torch.tensor(0)
+
+    self.d_X3c1_vac_d_varphi = torch.matmul(self.d_d_varphi, self.X3c1_vac)
+    self.d_Y3c1_vac_d_varphi = torch.matmul(self.d_d_varphi, self.Y3c1_vac)
+    self.d_Y3s1_vac_d_varphi = torch.matmul(self.d_d_varphi, self.Y3s1_vac)
+
+    # The expression below is derived in the O(r**2) paper, and in "20190318-01 Wrick's streamlined Garren-Boozer method, MHD.nb" in the section "Not assuming quasisymmetry".
+    # Note Q = (1/2) * (XYEquation0 without X3 and Y3 terms) where XYEquation0 is the quantity in the above notebook.
+    Q = -sign_psi * B0 * abs_G0_over_B0 / (2*G0*G0) * (iotaN * I2 + mu0 * p2 * G0 / (B0 * B0)) + 2 * (X2c * Y2s - X2s * Y2c) \
+            + sign_psi * B0 / (2*G0) * (abs_G0_over_B0 * X20 * curvature - d_Z20_d_varphi) \
+            + I2 / (4 * G0) * (-abs_G0_over_B0 * torsion * (X1c*X1c + Y1s*Y1s + Y1c*Y1c) + Y1c * d_X1c_d_varphi - X1c * d_Y1c_d_varphi)
+    predicted_flux_constraint_coefficient = - Q / (2 * sign_G * sign_psi)
+
+    B0_order_a_squared_to_cancel = -sign_G * B0 * B0 * (G2 + I2 * N_helicity) * abs_G0_over_B0 / (2*G0*G0) \
+        -sign_G * sign_psi * B0 * 2 * (X2c * Y2s - X2s * Y2c) \
+        -sign_G * B0 * B0 / (2*G0) * (abs_G0_over_B0 * X20 * curvature - d_Z20_d_varphi) \
+        -sign_G * sign_psi * B0 * I2 / (4*G0) * (-abs_G0_over_B0 * torsion * (X1c*X1c + Y1c*Y1c + Y1s*Y1s) + Y1c * d_X1c_d_varphi - X1c * d_Y1c_d_varphi)
+
+    logger.debug('max|flux_constraint_coefficient - predicted_flux_constraint_coefficient|: '
+                 f'{torch.max(abs(flux_constraint_coefficient - predicted_flux_constraint_coefficient))}')
+    logger.debug('max|flux_constraint_coefficient - B0_order_a_squared_to_cancel/(2*B0)|: '
+                 f'{torch.max(abs(flux_constraint_coefficient - B0_order_a_squared_to_cancel/(2*B0)))}')
+
+    if torch.max(abs(flux_constraint_coefficient - predicted_flux_constraint_coefficient)) > 1e-7 \
+    or torch.max(abs(flux_constraint_coefficient - B0_order_a_squared_to_cancel/(2*B0))) > 1e-7:
+        logger.warning("Methods of computing lambda disagree!! Higher nphi resolution might be needed.")
+
+    self.flux_constraint_coefficient_vac = flux_constraint_coefficient
+    self.B0_order_a_squared_to_cancel_vac = B0_order_a_squared_to_cancel
+
+    if self.helicity == 0:
+        self.X3c1_vac_untwisted = self.X3c1_vac
+        self.Y3c1_vac_untwisted = self.Y3c1_vac
+        self.Y3s1_vac_untwisted = self.Y3s1_vac
+        self.X3s1_vac_untwisted = self.X3s1_vac
+        self.X3s3_vac_untwisted = self.X3s3_vac
+        self.X3c3_vac_untwisted = self.X3c3_vac
+        self.Y3c3_vac_untwisted = self.Y3c3_vac
+        self.Y3s3_vac_untwisted = self.Y3s3_vac
+        self.Z3s1_vac_untwisted = self.Z3s1_vac
+        self.Z3s3_vac_untwisted = self.Z3s3_vac
+        self.Z3c1_vac_untwisted = self.Z3c1_vac
+        self.Z3c3_vac_untwisted = self.Z3c3_vac
+    else:
+        angle = -self.helicity * self.nfp * self.varphi
+        sinangle = torch.sin(angle)
+        cosangle = torch.cos(angle)
+        self.X3s1_vac_untwisted = self.X3s1_vac *   cosangle  + self.X3c1_vac * sinangle
+        self.X3c1_vac_untwisted = self.X3s1_vac * (-sinangle) + self.X3c1_vac * cosangle
+        self.Y3s1_vac_untwisted = self.Y3s1_vac *   cosangle  + self.Y3c1_vac * sinangle
+        self.Y3c1_vac_untwisted = self.Y3s1_vac * (-sinangle) + self.Y3c1_vac * cosangle
+        self.Z3s1_vac_untwisted = self.Z3s1_vac *   cosangle  + self.Z3c1_vac * sinangle
+        self.Z3c1_vac_untwisted = self.Z3s1_vac * (-sinangle) + self.Z3c1_vac * cosangle
+        sinangle = torch.sin(3*angle)
+        cosangle = torch.cos(3*angle)
+        self.X3s3_vac_untwisted = self.X3s3_vac *   cosangle  + self.X3c3_vac * sinangle
+        self.X3c3_vac_untwisted = self.X3s3_vac * (-sinangle) + self.X3c3_vac * cosangle
+        self.Y3s3_vac_untwisted = self.Y3s3_vac *   cosangle  + self.Y3c3_vac * sinangle
+        self.Y3c3_vac_untwisted = self.Y3s3_vac * (-sinangle) + self.Y3c3_vac * cosangle
+        self.Z3s3_vac_untwisted = self.Z3s3_vac *   cosangle  + self.Z3c3_vac * sinangle
+        self.Z3c3_vac_untwisted = self.Z3s3_vac * (-sinangle) + self.Z3c3_vac * cosangle
 
 # TODO: @padidar torch this function
 def calculate_shear(self,B31c = 0):

@@ -230,10 +230,18 @@ def r1_diagnostics(self):
     Compute various properties of the O(r^1) solution, once sigma and
     iota are solved for.
     """
+    # vacuum and non-vacuum componets and identical for X1s, X1c
+    self.X1s_vac = torch.clone(self.X1s)
+    self.X1s_nonvac = torch.zeros(self.nphi)
+    self.X1c_vac = torch.clone(self.X1c)
+    self.X1c_nonvac = torch.zeros(self.nphi)
+
+    # vacuum and non-vacuum componets and identical for Y1s
     self.Y1s = self.sG * self.spsi * self.curvature / self.etabar
+    self.Y1s_vac = torch.clone(self.Y1s)
+
     self.Y1c = self.sG * self.spsi * self.curvature * self.sigma / self.etabar
     self.Y1c_vac = self.sG * self.spsi * self.curvature * self.sigma_vac / self.etabar
-    self.Y1c_nonvac = self.Y1c - self.Y1c_vac
 
     # If helicity is nonzero, then the original X1s/X1c/Y1s/Y1c variables are defined with respect to a "poloidal" angle that
     # is actually helical, with the theta=0 curve wrapping around the magnetic axis as you follow phi around toroidally. Therefore
@@ -243,6 +251,9 @@ def r1_diagnostics(self):
         self.X1c_untwisted = self.X1c
         self.Y1s_untwisted = self.Y1s
         self.Y1c_untwisted = self.Y1c
+        self.X1s_vac_untwisted = self.X1s_vac
+        self.X1c_vac_untwisted = self.X1c_vac
+        self.Y1s_vac_untwisted = self.Y1s_vac
         self.Y1c_vac_untwisted = self.Y1c_vac
     else:
         angle = -self.helicity * self.nfp * self.varphi
@@ -252,10 +263,12 @@ def r1_diagnostics(self):
         self.X1c_untwisted = self.X1s * (-sinangle) + self.X1c * cosangle
         self.Y1s_untwisted = self.Y1s *   cosangle  + self.Y1c * sinangle
         self.Y1c_untwisted = self.Y1s * (-sinangle) + self.Y1c * cosangle
+        self.X1s_vac_untwisted = torch.clone(self.X1s_untwisted)
+        self.X1c_vac_untwisted = torch.clone(self.X1c_untwisted)
+        self.Y1s_vac_untwisted = torch.clone(self.Y1s_untwisted)
         self.Y1c_vac_untwisted = self.Y1s * (-sinangle) + self.Y1c_vac * cosangle
-    
-    self.Y1c_nonvac_untwisted = self.Y1c_untwisted - self.Y1c_vac_untwisted
 
+    
     # Use (R,Z) for elongation in the (R,Z) plane,
     # or use (X,Y) for elongation in the plane perpendicular to the magnetic axis.
     p = self.X1s * self.X1s + self.X1c * self.X1c + self.Y1s * self.Y1s + self.Y1c * self.Y1c
@@ -271,7 +284,6 @@ def r1_diagnostics(self):
     self.d_Y1s_d_varphi = torch.matmul(self.d_d_varphi, self.Y1s)
     self.d_Y1c_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c)
     self.d_Y1c_vac_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c_vac)
-    self.d_Y1c_nonvac_d_varphi = torch.matmul(self.d_d_varphi, self.Y1c_nonvac)
 
     self.calculate_grad_B_tensor()
     self.calculate_grad_B_tensor_vac()
