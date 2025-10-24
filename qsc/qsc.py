@@ -47,8 +47,8 @@ class Qsc(torch.nn.Module):
                                  grad_B_external_on_axis_taylor,
                                  B_external_on_axis,
                                  grad_B_external_on_axis,
-                                 B_external_on_axis_split,
-                                 grad_B_external_on_axis_split,
+                                 B_external_on_axis_corrected,
+                                 grad_B_external_on_axis_corrected,
                                  build_virtual_casing_interpolants_split,
                                  curl_taylor, divergence_taylor,
                                  )
@@ -174,8 +174,8 @@ class Qsc(torch.nn.Module):
         """
         # clear the cached values
         self.build_virtual_casing_interpolants_split.cache_clear()
-        self.B_external_on_axis_split.cache_clear()
-        self.grad_B_external_on_axis_split.cache_clear()
+        self.B_external_on_axis_corrected.cache_clear()
+        self.grad_B_external_on_axis_corrected.cache_clear()
         self.B_external_on_axis_taylor.cache_clear()
         self.grad_B_external_on_axis_taylor.cache_clear()
     
