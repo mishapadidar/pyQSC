@@ -58,6 +58,20 @@ def test_B_external_on_axis_taylor():
         err = val_vac_stel - val_stel_vac
         assert torch.allclose(val_vac_stel, val_stel_vac, atol=1e-14), "Vacuum Bexternal mismatch between nonvac and vac case"
 
+    # test the cache works
+    import time
+    stel = Qsc.from_paper("precise QA", nphi=61)
+    stel.B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256)
+    t0 = time.time()
+    stel.B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256)
+    t1 = time.time()
+    assert t1 - t0 < 1e-4, "Caching of B_external_on_axis_taylor failed"
+    stel.B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256, vacuum_component=True)
+    t0 = time.time()
+    stel.B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256, vacuum_component=True)
+    t1 = time.time()
+    assert t1 - t0 < 1e-4, "Caching of B_external_on_axis_taylor failed"
+
 def test_grad_B_external_on_axis_taylor_converges():
     """
     Show that the computation of grad_B_external_on_axis_taylor converges with nphi.
@@ -154,6 +168,20 @@ def test_grad_B_external_on_axis_taylor_accuracy():
         # vacuum component of nonvac field should match the total vacuum solution
         err = val_vac_stel - val_stel_vac
         assert torch.allclose(val_vac_stel, val_stel_vac, atol=1e-14), "Vacuum grad_B_external_on_axis_taylor mismatch between nonvac and vac case"
+
+    # test the cache works
+    import time
+    stel = Qsc.from_paper("precise QA", nphi=61)
+    stel.grad_B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256)
+    t0 = time.time()
+    stel.grad_B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256)
+    t1 = time.time()
+    assert t1 - t0 < 1e-4, "Caching of grad_B_external_on_axis_taylor failed"
+    stel.grad_B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256, vacuum_component=True)
+    t0 = time.time()
+    stel.grad_B_external_on_axis_taylor(r=0.1, ntheta=64, nphi=256, vacuum_component=True)
+    t1 = time.time()
+    assert t1 - t0 < 1e-4, "Caching of grad_B_external_on_axis_taylor failed"
 
 def test_grad_B_external_on_axis_taylor_consistency():
     """

@@ -49,7 +49,7 @@ class Qsc(torch.nn.Module):
                                  grad_B_external_on_axis,
                                  B_external_on_axis_corrected,
                                  grad_B_external_on_axis_corrected,
-                                 build_virtual_casing_interpolants_split,
+                                 build_virtual_casing_interpolants,
                                  curl_taylor, divergence_taylor,
                                  )
     from .configurations import from_paper, configurations
@@ -173,7 +173,7 @@ class Qsc(torch.nn.Module):
         Clear the cached values for the virtual casing and other.
         """
         # clear the cached values
-        self.build_virtual_casing_interpolants_split.cache_clear()
+        self.build_virtual_casing_interpolants.cache_clear()
         self.B_external_on_axis_corrected.cache_clear()
         self.grad_B_external_on_axis_corrected.cache_clear()
         self.B_external_on_axis_taylor.cache_clear()
