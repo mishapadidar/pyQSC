@@ -61,3 +61,23 @@ def create_equally_spaced_curves_around_axis(stel, ncurves, stellsym, R1=0.5, or
         curves.append(curve)
 
     return curves
+
+
+def to_CurveRZFourier(stel):
+    """Convert the magnetic axis of a Qsc object to a CurveRZFourier object.
+
+    Args:
+        stel (Qsc): Qsc object
+
+    Returns:
+        CurveRZFourier: magnetic axis as a CurveRZFourier object
+    """
+    from simsopt.geo import CurveRZFourier
+    quadpoints = stel.phi.detach().numpy() / (2 * np.pi)
+    nfourier = stel.nfourier
+    nfp = stel.nfp
+    stellsym = stel.stellsym
+    curve = CurveRZFourier(quadpoints=quadpoints, order=nfourier - 1, nfp=nfp, stellsym=stellsym)
+    curve.unfix_all()
+    curve.x = np.concatenate((stel.rc.detach().numpy(), stel.zs[1:].detach().numpy())).flatten()
+    return curve

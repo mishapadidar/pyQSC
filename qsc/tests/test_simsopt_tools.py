@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 from simsopt.geo import plot
 from simsopt.field import Current, coils_via_symmetries
 from qsc.qsc import Qsc
-from qsc.simsopt_tools import create_equally_spaced_curves_around_axis
-
+from qsc.simsopt_tools import create_equally_spaced_curves_around_axis, to_CurveRZFourier
+import numpy as np
 
 def test_create_equally_spaced_curves_around_axis():
     """Test the create_equally_spaced_curves_around_axis function.
@@ -25,5 +25,26 @@ def test_create_equally_spaced_curves_around_axis():
     ax.set_zlim(-1.2, 1.2)
     plt.show()
 
+def test_to_CurveRZFourier():
+    """Test the to_CurveRZFourier function.
+    """
+    # check accuracy in QA
+    stel = Qsc.from_paper("precise QA")
+    curve = to_CurveRZFourier(stel)
+    xyz = curve.gamma()
+    xyz_actual = stel.XYZ0.detach().numpy().T # (nphi, 3)
+    err = np.max(np.abs(xyz - xyz_actual))
+    assert err < 1e-15, f"Max error in to_CurveRZFourier is {err}"
+
+    # check accuracy in QH
+    stel = Qsc.from_paper("precise QH")
+    curve = to_CurveRZFourier(stel)
+    xyz = curve.gamma()
+    xyz_actual = stel.XYZ0.detach().numpy().T # (nphi, 3)
+    err = np.max(np.abs(xyz - xyz_actual))
+    assert err < 1e-15, f"Max error in to_CurveRZFourier is {err}"
+
+
 if __name__ == "__main__":
     test_create_equally_spaced_curves_around_axis()
+    test_to_CurveRZFourier()

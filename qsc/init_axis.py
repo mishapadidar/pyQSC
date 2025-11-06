@@ -186,6 +186,7 @@ def init_axis(self):
     # nonzero and order != 'r1')
     self.lasym = torch.max(torch.abs(self.rs)) > 0 or torch.max(torch.abs(self.zc)) > 0 \
         or self.sigma0 != 0 or (self.order != 'r1' and self.B2s != 0)
+    self.stellsym = not self.lasym
 
     # TODO: use torch interpolation here
     # Functions that converts a toroidal angle phi0 on the axis to the axis radial and vertical coordinates
