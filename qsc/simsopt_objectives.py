@@ -1520,3 +1520,162 @@ class ThetaCurvaturePenalty(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dobj()
+
+
+class SquaredFlux(Optimizable):
+    def __init__(self, bs, stel, r, ntheta=64, vacuum_component=False):
+        """
+        Compute the squared flux of the coil field on a flux surface,
+            J = (1/2) int (Bcoil * nhat)^2 dA / int |Bcoil|^2 dA
+
+        Args:
+            bs (biotsavart): a BiotSavart object.
+            stel (QscOptimizable): a QscOptimizable object.
+            r (float): minor radius of the flux surface on which to evaluate the objective.
+            ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+            vacuum_component (bool, optional): whether to take the integral over the the vacuum component 
+                of the surface, i.e. the surface computed when p2=I2=0. Defaults to True.
+        """
+        self.bs = bs
+        self.stel = stel
+        self.r = r
+        self.ntheta = ntheta
+        self.vacuum_component = vacuum_component
+        self.need_to_run_code = True
+        Optimizable.__init__(self, depends_on=[bs, stel])
+
+    def recompute_bell(self, parent=None):
+        """
+        This function will get called any time any of the DOFs of the
+        parent class change.
+        need_to_run_code signifies the need to reevaluate the field_error method.
+        """
+        self.need_to_run_code = True
+        return super().recompute_bell(parent)
+
+    def squared_flux(self):
+        """
+        Sum-of-squares error in the field:
+            J = (1/2) int (Bcoil * nhat)^2 dA / int |Bcoil|^2 dA
+        where the integral is taken over a flux surface
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        if not self.need_to_run_code:
+            return self.loss
+        
+        # evaluate coil field
+        xyz = self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        xyz_np = xyz.detach().numpy().reshape((-1, 3)) # (nphi * ntheta, 3)
+        xyz_np = np.ascontiguousarray(xyz_np) # (nphi, 3)
+
+        # compute B * normal
+        self.bs.set_points(xyz_np)
+        B_coil = self.bs.B().reshape(self.stel.nphi, self.ntheta, 3) # (nphi, ntheta, 3)
+        B_coil = torch.tensor(B_coil) # convert to tensor
+        normal = self.stel.surface_normal(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        unit_normal = normal / torch.linalg.norm(normal, dim=-1, keepdim=True) # (nphi, ntheta, 3)
+        Bnormal = torch.sum(B_coil * unit_normal, dim=-1) # (nphi, ntheta)
+        
+        # compute loss
+        top = 0.5 * self.stel.surface_integral(Bnormal**2, r=self.r, vacuum_component=self.vacuum_component)
+        bottom = self.stel.surface_integral(torch.sum(B_coil**2, dim=-1), r=self.r, vacuum_component=self.vacuum_component)
+        
+        loss = top / bottom
+
+        self.need_to_run_code = False
+        self.loss = loss
+        self.top = top
+        self.bottom = bottom
+        return loss
+
+    def dsquared_flux(self):
+        """
+        Compute the derivative of squaredflux w.r.t all coil DOFS and axis DOFS.
+
+        Returns:
+            SIMSOPT Derivative object containing the derivatives.
+        """
+        self.squared_flux() # ensure loss, top, bottom are computed
+
+        top = torch.clone(self.top)
+        bottom = torch.clone(self.bottom)
+
+        xyz = self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        xyz_np = xyz.detach().numpy().reshape((-1, 3)) # (N, 3)
+        xyz_np = np.ascontiguousarray(xyz_np) # (N, 3)
+        self.bs.set_points(xyz_np)
+        B_coil = self.bs.B().reshape((-1, self.ntheta, 3)) # (nphi, ntheta, 3)
+        normal = self.stel.surface_normal(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component).detach().numpy() # (nphi, ntheta, 3)
+        dA = np.linalg.norm(normal, axis=-1, keepdims=True)
+        unit_normal = normal / dA # (nphi, ntheta, 3)
+        Bnormal = np.sum(B_coil * unit_normal, axis=-1, keepdims=True) # (nphi, ntheta, 1)
+        dphi = 2 * np.pi / self.stel.nfp / self.stel.nphi
+        dtheta = 2 * np.pi / self.ntheta
+        dA *= self.stel.d_varphi_d_phi[:, None, None].detach().numpy() * dphi * dtheta # (nphi, ntheta, 1)
+
+        # derivative with respect to biot savart dofs
+        top_inner =   self.stel.nfp * 0.5 * 2 * (Bnormal * dA * unit_normal)
+        dtop_by_dbs = self.bs.B_vjp(top_inner.reshape((-1,3))) # Derivative object
+        bottom_inner = self.stel.nfp * 2 * (B_coil * dA)
+        dbottom_by_dbs =  self.bs.B_vjp(bottom_inner.reshape((-1,3))) # Derivative object
+
+        # quotient rule
+        bottom_np = bottom.detach().numpy()
+        top_np = top.detach().numpy()
+        dJ_by_dbs = (bottom_np * dtop_by_dbs - top_np * dbottom_by_dbs) * (1 / bottom_np**2)
+
+
+        """ Derivative w.r.t. axis coeffs """
+        # this part of the derivative treats B_coil as a constant, independent of the axis
+        dtop_by_ddofs = self.stel.total_derivative(top) # list
+        dbottom_by_ddofs = self.stel.total_derivative(bottom) # list
+
+        # derivative of B_coil(xyz(axis_coeffs)) term
+        dofs = self.stel.get_dofs(as_tuple=True)
+        dB_by_dX_bs = self.bs.dB_by_dX().reshape((-1, self.ntheta, 3, 3)) # (nphi, ntheta, 3, 3)
+        top_term21 = np.einsum("ijk,ijkl->ijl", top_inner, dB_by_dX_bs) # (nphi, ntheta, 3)
+        top_term2 = self.stel.total_derivative(torch.sum(torch.tensor(top_term21) * xyz)) # list
+        bottom_term21 = np.einsum("ijk,ijkl->ijl", bottom_inner, dB_by_dX_bs) # (n, 3)
+        bottom_term2 = self.stel.total_derivative(torch.sum(torch.tensor(bottom_term21) * xyz)) # list
+
+        derivs_axis = np.zeros(0)
+        for ii, x in enumerate(dofs):
+            # sum the two parts of the derivative
+            dtop_by_dx = dtop_by_ddofs[ii].detach().numpy()
+            dbottom_by_dx = dbottom_by_ddofs[ii].detach().numpy()
+            if top_term2[ii] is not None:
+                dtop_by_dx += top_term2[ii].detach().numpy()
+            if bottom_term2[ii] is not None:
+                dbottom_by_dx += bottom_term2[ii].detach().numpy()
+
+            # quotient rule
+            dJ_by_dx = (bottom_np * dtop_by_dx - top_np * dbottom_by_dx) * (1/bottom_np**2)
+
+            derivs_axis = np.append(derivs_axis, dJ_by_dx)
+
+        # make a derivative object
+        dJ_by_daxis = Derivative({self.stel: derivs_axis})
+
+        dJ = dJ_by_daxis + dJ_by_dbs
+
+        return dJ
+
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.squared_flux().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dsquared_flux()
+
