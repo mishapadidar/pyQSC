@@ -244,7 +244,7 @@ def test_ExternalFieldError():
     # Make sure self-intersection doesnt exist: otherwise we lose accuracy!
     r = 0.1
     p2 = -1e5
-    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1e5, nphi=61)
+    stel = QscOptimizable.from_paper("precise QA", order='r3', p2=-1e5, nphi=61)
     fe = ExternalFieldError(biot_savart, stel, r=0.1, ntheta=256, nphi=256)
     stel.unfix_all()
 
@@ -318,7 +318,7 @@ def test_GradExternalFieldError():
     biot_savart = BiotSavart(coils)
 
     # set up the expansion
-    stel = QscOptimizable.from_paper("precise QA", order='r2', p2=1e-5, nphi=257)
+    stel = QscOptimizable.from_paper("precise QA", order='r3', p2=1e-5, nphi=257)
     fe = GradExternalFieldError(biot_savart, stel, r=0.1, ntheta=256)
 
     # keep the base point for finite-differences

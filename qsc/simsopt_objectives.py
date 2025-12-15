@@ -427,20 +427,16 @@ class ExternalFieldError(Optimizable):
             loss = torch.clone(self.field_error())
             dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
-            # derivative of B_coil(xyz(axis_coeffs)) term
-            # self.qsc.zero_grad()
+            # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
             dB_by_dX_bs = self.bs.dB_by_dX() # (ntarget, 3, 3)
             term21 = np.einsum("ji,jki->jk", ((B_coil - B_qsc) * dl), dB_by_dX_bs) # (ntarget, 3)
-
             dofs = self.qsc.get_dofs(as_tuple=True)
-            term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
+            term2 = self.qsc.total_derivative(torch.sum(X_target.T * torch.tensor(term21)))
 
+            # sum the two parts of the derivative
             derivs_axis = np.zeros(0)
             for ii, x in enumerate(dofs):
-                # sum the two parts of the derivative
-                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
-                if term2[ii] is not None:
-                    dJ_by_dx += term2[ii].detach().numpy()
+                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy() + term2[ii].detach().numpy()
                 derivs_axis = np.append(derivs_axis, dJ_by_dx)
             
             # make a derivative object
@@ -548,8 +544,6 @@ class GradExternalFieldError(Optimizable):
         grad_B_coil = self.bs.dB_by_dX() # (ntarget, 3, 3)
 
         # compute dl
-        # dphi = np.diff(self.qsc.phi)[0]
-        # dphi = (2 * np.pi / self.qsc.nfp) / self.ntarget
         dphi = self.qsc.d_phi.detach().numpy()
         dl = d_l_d_phi.detach().numpy().reshape((-1,1,1)) * dphi
 
@@ -565,20 +559,16 @@ class GradExternalFieldError(Optimizable):
             loss = torch.clone(self.field_error())
             dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
-            # derivative of B_coil(xyz(axis_coeffs)) term
+            # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
             d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
-            term21 = np.einsum("ilj,ijkl->ik", (grad_B_coil - grad_B_qsc) * dl, d2B_by_dXdX_bs) # (ntarget, 3)
+            term21 = np.einsum("ilj,ijkl->ik", vterm, d2B_by_dXdX_bs) # (ntarget, 3)
             dofs = self.qsc.get_dofs(as_tuple=True)
-            term2 = torch.autograd.grad(X_target.T, dofs, grad_outputs=torch.tensor(term21), retain_graph=True, allow_unused=True) # tuple
+            term2 = self.qsc.total_derivative(torch.sum(X_target.T * torch.tensor(term21)))
 
+            # sum the two parts of the derivative
             derivs_axis = np.zeros(0)
             for ii, x in enumerate(dofs):
-                # sum the two parts of the derivative
-                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
-
-                if term2[ii] is not None:
-                    dJ_by_dx += term2[ii].detach().numpy()
-                
+                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy() + term2[ii].detach().numpy()
                 derivs_axis = np.append(derivs_axis, dJ_by_dx)
 
             # make a derivative object
