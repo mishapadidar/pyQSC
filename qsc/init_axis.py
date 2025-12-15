@@ -150,6 +150,7 @@ def init_axis(self):
     self.Z0ppp = Z0ppp
     self.G0 = G0
     self.d_l_d_phi = d_l_d_phi
+    self.d_l = d_l_d_phi * d_phi
     self.axis_length = axis_length
     self.curvature = curvature
     self.torsion = torsion

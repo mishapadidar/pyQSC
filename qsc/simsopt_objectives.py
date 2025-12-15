@@ -387,6 +387,7 @@ class ExternalFieldError(Optimizable):
         
         # compute loss
         loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
+        self.B_coil = B_coil.T # (n, 3)
         self.loss = loss
         self.need_to_run_code = False
         return loss
@@ -400,23 +401,20 @@ class ExternalFieldError(Optimizable):
             of the .J function with respect to the BiotSavart
             and Expansion DOFs.
         """
+        loss = torch.clone(self.field_error())
+
         # Qsc field
-        X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
-        d_l_d_phi = torch.clone(self.qsc.d_l_d_phi) # (ntarget,)
         B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
+        B_coil = self.B_coil # (ntarget, 3)
+        dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1)) # (ntarget, 1)
 
-        # coil field
-        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
-        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
-        self.bs.set_points(X_target_np)
-        B_coil = self.bs.B() # (ntarget, 3)
+        v = (B_coil - B_qsc) * dl
 
-        # compute dl
-        dphi = torch.clone(self.qsc.d_phi)
-        dl = (d_l_d_phi * dphi).detach().numpy().reshape((-1,1)) # (ntarget, 1)
-
-        # derivative with respect to biot savart dofs
-        dJ_by_dbs = self.bs.B_vjp((B_coil - B_qsc)*dl) # Derivative object
+        # dont compute anything if biot savart dofs are all fixed
+        if np.any(self.qsc.dofs_free_status):
+            dJ_by_dbs = self.bs.B_vjp(v) # Derivative object
+        else:
+            dJ_by_dbs = Derivative()
 
         """ Derivative w.r.t. axis coeffs """
         
@@ -424,12 +422,12 @@ class ExternalFieldError(Optimizable):
         if np.any(self.qsc.dofs_free_status):
 
             # this part of the derivative treats B_coil as a constant, independent of the axis
-            loss = torch.clone(self.field_error())
             dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
             # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
+            X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
             dB_by_dX_bs = self.bs.dB_by_dX() # (ntarget, 3, 3)
-            term21 = np.einsum("ji,jki->jk", ((B_coil - B_qsc) * dl), dB_by_dX_bs) # (ntarget, 3)
+            term21 = np.einsum("ji,jki->jk", v, dB_by_dX_bs) # (ntarget, 3)
             dofs = self.qsc.get_dofs(as_tuple=True)
             term2 = self.qsc.total_derivative(torch.sum(X_target.T * torch.tensor(term21)))
 
@@ -441,10 +439,10 @@ class ExternalFieldError(Optimizable):
             
             # make a derivative object
             dJ_by_daxis = Derivative({self.qsc: derivs_axis})
-
-            dJ = dJ_by_daxis + dJ_by_dbs
         else:
-            dJ = dJ_by_dbs
+            dJ_by_daxis = Derivative()
+
+        dJ = dJ_by_daxis + dJ_by_dbs
 
         return dJ
 
@@ -519,6 +517,7 @@ class GradExternalFieldError(Optimizable):
         loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r,
                                                     ntheta=self.ntheta, nphi=self.nphi)
         self.loss = loss
+        self.grad_B_coil = grad_B_coil.T # (ntarget, 3, 3)
         self.need_to_run_code = False
         return loss
 
@@ -531,35 +530,30 @@ class GradExternalFieldError(Optimizable):
             SIMSOPT Derivative object: containing the derivatives of the .field_error function 
             with respect to the BiotSavart and Qsc DOFs.
         """
+        loss = torch.clone(self.field_error())
+        
         # Qsc field
-        X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
-        d_l_d_phi = torch.clone(self.qsc.d_l_d_phi) # (ntarget,)
         grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
         grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
+        grad_B_coil = self.grad_B_coil # (ntarget, 3, 3)
+        dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1,1)) # (ntarget, 1, 1)
 
-        # coil field
-        X_target_np = X_target.detach().numpy().T # (ntarget, 3)
-        X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
-        self.bs.set_points(X_target_np)
-        grad_B_coil = self.bs.dB_by_dX() # (ntarget, 3, 3)
-
-        # compute dl
-        dphi = self.qsc.d_phi.detach().numpy()
-        dl = d_l_d_phi.detach().numpy().reshape((-1,1,1)) * dphi
-
-        # derivative with respect to biot savart dofs
+        # derivative w.r.t. biot savart dofs
         v = np.ones(3)
-        vterm = (grad_B_coil - grad_B_qsc)*dl
-        _, dJ_by_dbs = self.bs.B_and_dB_vjp(v, vterm) # Derivative object
+        vterm = (grad_B_coil - grad_B_qsc) * dl
+        if np.any(self.bs.dofs_free_status):
+            _, dJ_by_dbs = self.bs.B_and_dB_vjp(v, vterm) # Derivative object
+        else:
+            # dont compute anything if biot savart dofs are all fixed
+            dJ_by_dbs = Derivative()
         
-        """ Derivative w.r.t. axis coeffs """
-        # dont compute anything if axis dofs are all fixed
+        # Derivative w.r.t. axis coeffs
         if np.any(self.qsc.dofs_free_status):
             # this part of the derivative treats B_coil as a constant, independent of the axis
-            loss = torch.clone(self.field_error())
             dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
             # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
+            X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
             d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
             term21 = np.einsum("ilj,ijkl->ik", vterm, d2B_by_dXdX_bs) # (ntarget, 3)
             dofs = self.qsc.get_dofs(as_tuple=True)
@@ -573,10 +567,11 @@ class GradExternalFieldError(Optimizable):
 
             # make a derivative object
             dJ_by_daxis = Derivative({self.qsc: derivs_axis})
-
-            dJ = dJ_by_daxis + dJ_by_dbs
         else:
-            dJ = dJ_by_dbs
+            # dont compute anything if axis dofs are all fixed
+            dJ_by_daxis = Derivative()
+
+        dJ = dJ_by_daxis + dJ_by_dbs
 
         return dJ
 

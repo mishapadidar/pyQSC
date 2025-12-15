@@ -295,6 +295,24 @@ def test_ExternalFieldError():
     print(err)
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
+    # compute derivatives when dofs are fixed
+    biot_savart.unfix_all()
+    stel.fix_all()
+    partials = fe.dfield_error()
+    dfe_by_dbs = partials(biot_savart)
+    err = dfe_by_dbs - fe.dJ()
+    assert np.max(np.abs(err)) < 1e-15, "FAIL: bs derivatives are incorrect"
+    assert len(fe.dJ()) == np.sum(biot_savart.dofs_free_status), "FAIL: number of derivatives incorrect when qsc dofs are fixed"
+
+    # compute derivatives when dofs are fixed
+    stel.unfix_all()
+    biot_savart.fix_all()
+    partials = fe.dfield_error()
+    dfe_by_dqsc = partials(stel)
+    err = dfe_by_dqsc - fe.dJ()
+    assert np.max(np.abs(err)) < 1e-15, "FAIL: qsc derivatives are incorrect"
+    assert len(fe.dJ()) == np.sum(stel.local_dofs_free_status), "FAIL: number of derivatives incorrect when bs dofs are fixed"
+
 
 def test_GradExternalFieldError():
     """
@@ -318,8 +336,10 @@ def test_GradExternalFieldError():
     biot_savart = BiotSavart(coils)
 
     # set up the expansion
-    stel = QscOptimizable.from_paper("precise QA", order='r3', p2=1e-5, nphi=257)
-    fe = GradExternalFieldError(biot_savart, stel, r=0.1, ntheta=256)
+    nphi = 99
+    ntheta = 32
+    stel = QscOptimizable.from_paper("precise QA", order='r3', p2=1e-5, nphi=nphi)
+    fe = GradExternalFieldError(biot_savart, stel, r=0.1, ntheta=ntheta)
 
     # keep the base point for finite-differences
     fe.unfix_all()
@@ -360,6 +380,28 @@ def test_GradExternalFieldError():
     err = np.max(np.abs(dfe_by_dqsc_fd - dfe_by_dqsc))
     print(err)
     assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
+
+    # reset after using torch.no_grad()
+    fe.unfix_all()
+    fe.x = x0
+
+    # compute derivatives when dofs are fixed
+    biot_savart.unfix_all()
+    stel.fix_all()
+    partials = fe.dfield_error()
+    dfe_by_dbs = partials(biot_savart)
+    err = dfe_by_dbs - fe.dJ()
+    assert np.max(np.abs(err)) < 1e-15, "FAIL: bs derivatives are incorrect"
+    assert len(fe.dJ()) == np.sum(biot_savart.dofs_free_status), "FAIL: number of derivatives incorrect when qsc dofs are fixed"
+
+    # compute derivatives when dofs are fixed
+    stel.unfix_all()
+    biot_savart.fix_all()
+    partials = fe.dfield_error()
+    dfe_by_dqsc = partials(stel)
+    err = dfe_by_dqsc - fe.dJ()
+    assert np.max(np.abs(err)) < 1e-15, "FAIL: qsc derivatives are incorrect"
+    assert len(fe.dJ()) == np.sum(stel.local_dofs_free_status), "FAIL: number of derivatives incorrect when bs dofs are fixed"
 
 def test_IotaPenalty():
         # set up the expansion
