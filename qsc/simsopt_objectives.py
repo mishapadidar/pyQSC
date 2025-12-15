@@ -336,7 +336,7 @@ class ExternalFieldError(Optimizable):
     def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
         """Integrated mean-squared error between the Cartesian external magnetic field on axis
         and a target magnetic field over the magnetic axis,
-                Loss = (1/2) int |B - B_target|**2 dl
+                Loss = (1/2) int |B - B_target|**2 dl / int B0^2 dl
         B is computed by the virtual casing integral by integrating over a surface of
         radius r. This class is a Simsopt Optimizable object.
 
@@ -369,7 +369,7 @@ class ExternalFieldError(Optimizable):
     def field_error(self):
         """
         Sum-of-squares error in the virtual-casing field:
-            (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi
+            (1/2) * int |B_axis - B_coil|^2 dl/dphi dphi / int B0^2 dl
         where the integral is taken along the axis.
 
         Returns:
@@ -386,9 +386,13 @@ class ExternalFieldError(Optimizable):
         B_coil = self.bs.B().T # (3, n)
         
         # compute loss
-        loss = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
+        top = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
+        bottom = self.qsc.B0**2 * self.qsc.axis_length
+        loss = top / bottom
         self.B_coil = B_coil.T # (n, 3)
         self.loss = loss
+        self.top = top
+        self.bottom = bottom
         self.need_to_run_code = False
         return loss
 
@@ -402,13 +406,14 @@ class ExternalFieldError(Optimizable):
             and Expansion DOFs.
         """
         loss = torch.clone(self.field_error())
+        bottom = torch.clone(self.bottom)
 
         # Qsc field
         B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
         B_coil = self.B_coil # (ntarget, 3)
         dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1)) # (ntarget, 1)
 
-        v = (B_coil - B_qsc) * dl
+        v = (B_coil - B_qsc) * dl / bottom.detach().numpy()
 
         # dont compute anything if biot savart dofs are all fixed
         if np.any(self.qsc.dofs_free_status):
@@ -467,7 +472,7 @@ class GradExternalFieldError(Optimizable):
     def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
         """        Integrated mean-squared error between the gradient of the external magnetic field on axis
         and the gradient of the Biot Savart field over the magnetic axis,
-                Loss = (1/2) int |grad_B_external - grad_B_bs|**2 dl
+                Loss = (1/2) int |grad_B_external - grad_B_bs|**2 dl / int |grad_B_external|^2 dl
         grad_B_external is computed by the virtual casing integral by integrating over a surface of
         radius r.
 
@@ -514,10 +519,19 @@ class GradExternalFieldError(Optimizable):
         grad_B_coil = self.bs.dB_by_dX().T # (3, 3, ntarget)
 
         # compute loss
-        loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r,
-                                                    ntheta=self.ntheta, nphi=self.nphi)
+        # loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r,
+        #                                             ntheta=self.ntheta, nphi=self.nphi)
+        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi) # (3, 3, n)
+        dl = torch.clone(self.qsc.d_l)
+        top = 0.5 * torch.sum(torch.sum((grad_B_qsc - torch.tensor(grad_B_coil))**2, dim=(0,1)) * dl) # scalar tensor
+        bottom = torch.sum(torch.sum(grad_B_qsc**2, dim=(0,1)) * dl) # scalar tensor
+        loss = top / bottom
+
         self.loss = loss
+        self.top = top
+        self.bottom = bottom
         self.grad_B_coil = grad_B_coil.T # (ntarget, 3, 3)
+        self.grad_B_qsc = grad_B_qsc
         self.need_to_run_code = False
         return loss
 
@@ -531,16 +545,17 @@ class GradExternalFieldError(Optimizable):
             with respect to the BiotSavart and Qsc DOFs.
         """
         loss = torch.clone(self.field_error())
-        
+        bottom = torch.clone(self.bottom)
+
         # Qsc field
-        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
-        grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
+        # grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
+        grad_B_qsc = self.grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
         grad_B_coil = self.grad_B_coil # (ntarget, 3, 3)
         dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1,1)) # (ntarget, 1, 1)
 
         # derivative w.r.t. biot savart dofs
-        v = np.ones(3)
-        vterm = (grad_B_coil - grad_B_qsc) * dl
+        v = np.zeros(3)
+        vterm = (grad_B_coil - grad_B_qsc) * dl / bottom.detach().numpy()
         if np.any(self.bs.dofs_free_status):
             _, dJ_by_dbs = self.bs.B_and_dB_vjp(v, vterm) # Derivative object
         else:
