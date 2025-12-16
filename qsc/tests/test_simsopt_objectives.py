@@ -494,6 +494,21 @@ def test_ExternalFieldErrorOnSurface():
     assert np.max(np.abs(err)) < 1e-15, "FAIL: qsc derivatives are incorrect"
     assert len(fe.dJ()) == np.sum(stel.local_dofs_free_status), "FAIL: number of derivatives incorrect when bs dofs are fixed"
 
+    # check the function value with a mocked external field
+    fe.need_to_run_code = True
+    fe.unfix_all()
+    x0 = fe.x
+    stel.calculate()
+    from unittest.mock import patch
+    from torch import tensor
+    xyz = stel.surface(r=r_target, ntheta=ntheta_target).reshape((-1, 3)) # (nphi * ntheta_target, 3)
+    xyz_np = np.ascontiguousarray(xyz.detach().numpy()) # (nphi * ntheta_target, 3)
+    biot_savart.set_points(xyz_np)
+    B_coil = biot_savart.B() 
+    B_ext = 2 * torch.tensor(B_coil)
+    with patch.object(QscOptimizable, 'B_external_on_axis_taylor', return_value=B_ext):
+        np.testing.assert_allclose(fe.J(), 0.25, atol=1e-15, err_msg="ExternalFieldErrorOnSurface objective value incorrect")
+
 
 def test_IotaPenalty():
         # set up the expansion
