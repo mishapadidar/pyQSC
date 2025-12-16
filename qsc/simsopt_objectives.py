@@ -336,9 +336,9 @@ class ExternalFieldError(Optimizable):
     def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
         """Integrated mean-squared error between the Cartesian external magnetic field on axis
         and a target magnetic field over the magnetic axis,
-                Loss = (1/2) int |B - B_target|**2 dl / int B0^2 dl
-        B is computed by the virtual casing integral by integrating over a surface of
-        radius r. This class is a Simsopt Optimizable object.
+                Loss = (1/2) int |B_ext - B_coil|**2 dl / int B0^2 dl
+        B_ext is computed by the virtual casing integral by integrating over a surface of
+        radius r.
 
         Args:
             bs (BiotSavart): Simsopt BiotSavart object.
@@ -412,11 +412,15 @@ class ExternalFieldError(Optimizable):
         B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
         B_coil = self.B_coil # (ntarget, 3)
         dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1)) # (ntarget, 1)
-
+        X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
+        X_target_np = np.ascontiguousarray(X_target.detach().numpy().T) # (ntarget, 3)
+        self.bs.set_points(X_target_np)
+        
         v = (B_coil - B_qsc) * dl / bottom.detach().numpy()
 
         # dont compute anything if biot savart dofs are all fixed
-        if np.any(self.qsc.dofs_free_status):
+        if np.any(self.bs.dofs_free_status):
+
             dJ_by_dbs = self.bs.B_vjp(v) # Derivative object
         else:
             dJ_by_dbs = Derivative()
@@ -430,7 +434,6 @@ class ExternalFieldError(Optimizable):
             dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
             # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
-            X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
             dB_by_dX_bs = self.bs.dB_by_dX() # (ntarget, 3, 3)
             term21 = np.einsum("ji,jki->jk", v, dB_by_dX_bs) # (ntarget, 3)
             dofs = self.qsc.get_dofs(as_tuple=True)
@@ -552,7 +555,10 @@ class GradExternalFieldError(Optimizable):
         grad_B_qsc = self.grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
         grad_B_coil = self.grad_B_coil # (ntarget, 3, 3)
         dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1,1)) # (ntarget, 1, 1)
-
+        X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
+        X_target_np = np.ascontiguousarray(X_target.detach().numpy().T) # (ntarget, 3)
+        self.bs.set_points(X_target_np)
+        
         # derivative w.r.t. biot savart dofs
         v = np.zeros(3)
         vterm = (grad_B_coil - grad_B_qsc) * dl / bottom.detach().numpy()
@@ -568,7 +574,6 @@ class GradExternalFieldError(Optimizable):
             dloss_by_ddofs = self.qsc.total_derivative(loss) # list
 
             # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
-            X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
             d2B_by_dXdX_bs = self.bs.d2B_by_dXdX() # (ntarget, 3, 3, 3)
             term21 = np.einsum("ilj,ijkl->ik", vterm, d2B_by_dXdX_bs) # (ntarget, 3)
             dofs = self.qsc.get_dofs(as_tuple=True)
@@ -608,6 +613,162 @@ class GradExternalFieldError(Optimizable):
             array: gradient of the objective function as an np arrray.
         """
         return self.dfield_error()    
+
+class ExternalFieldErrorOnSurface(Optimizable):
+    def __init__(self, bs, stel, r_target, r_source, ntheta_target=32, ntheta_source=256, nphi_source=1024):
+        """Integrated mean-squared error between the Cartesian external magnetic field
+        and a target magnetic field over a flux surface of radius r,
+                Loss = int |B_ext - B_coil|**2 dA / int |B_ext|^2 dA
+        B_ext is computed by the virtual casing integral by integrating over a surface of
+        radius r.
+
+        Args:
+            bs (BiotSavart): Simsopt BiotSavart object.
+            stel (QscOptimizable): QscOptimizable object
+            r_target (float): minor radius of target surface. Must be strictly less than r_source.
+            r_source (float): minor radius of source surface for virtual casing integral.
+            ntheta_target (int, optional): Number of theta quadrature points for target surface integral.
+                Defaults to 32.
+            ntheta_source (int, optional): Number of theta quadrature points for virtual casing integral.
+                Defaults to 256.
+            nphi_source (int, optional): Number of phi quadrature points for virtual casing integral.
+                Defaults to 1024.
+        """
+        assert r_target < r_source, "r_target must be strictly less than r_source."
+        self.bs = bs
+        self.stel = stel
+        self.r_target = r_target
+        self.r_source = r_source
+        self.ntheta_target = ntheta_target
+        self.ntheta_source = ntheta_source
+        self.nphi_source = nphi_source
+        self.need_to_run_code = True
+        Optimizable.__init__(self, depends_on=[bs, stel])
+
+    def recompute_bell(self, parent=None):
+        """
+        This function will get called any time any of the DOFs of the
+        parent class change.
+        need_to_run_code signifies the need to reevaluate the field_error method.
+        """
+        self.need_to_run_code = True
+        return super().recompute_bell(parent)
+
+    def field_error(self):
+        """
+        Compute the objective function.
+
+        Returns:
+            tensor: float tensor with the objective value.
+        """
+        if not self.need_to_run_code:
+            return self.loss
+        
+        # evaluate coil field on target surface
+        xyz = self.stel.surface(r=self.r_target, ntheta=self.ntheta_target).reshape((-1, 3)) # (nphi * ntheta_target, 3)
+        xyz_np = np.ascontiguousarray(xyz.detach().numpy()) # (nphi * ntheta_target, 3)
+        self.bs.set_points(xyz_np)
+        B_coil = self.bs.B() 
+        
+        # evaluate B_external on target surface
+        B_external = self.stel.B_external_on_axis_taylor(r=self.r_source, ntheta=self.ntheta_source, nphi=self.nphi_source, X_target=xyz) # (n_target, 3)
+        
+        # compute loss
+        B_coil = torch.tensor(B_coil).reshape(-1, self.ntheta_target, 3) # (nphi, ntheta_target, 3)
+        B_external = B_external.reshape(-1, self.ntheta_target, 3) # (nphi, ntheta_target, 3)
+        diff = torch.sum((B_external - B_coil)**2, dim=-1) # (nphi, ntheta_target)
+        top = self.stel.surface_integral(diff, r=self.r_target)
+        # TODO: is the autodiff faster when using B_coil in the denominator?
+        bottom = self.stel.surface_integral(torch.sum(B_external**2, dim=-1), r=self.r_target)
+        
+        loss = top / bottom
+
+        self.loss = loss
+        self.top = top
+        self.bottom = bottom
+        self.B_coil = B_coil # (nphi, ntheta_target, 3)
+        self.B_external = B_external # (nphi, ntheta_target, 3)
+        self.need_to_run_code = False
+        return loss
+
+    def dfield_error(self):
+        """
+        Derivative of the field error w.r.t all coil coeffs,
+            axis coefs, and etabar.
+
+        return: SIMSOPT Derivative object containing the derivatives
+            of the .J function with respect to the BiotSavart
+            and Expansion DOFs.
+        """
+
+        loss = torch.clone(self.field_error())
+        bottom = torch.clone(self.bottom)
+
+        B_external = torch.clone(self.B_external).detach().numpy() # (nphi, ntheta_target, 3)
+        B_coil = torch.clone(self.B_coil).detach().numpy() # (nphi, ntheta_target, 3)
+        # TODO: pull these from cache
+        dA = self.stel.surface_area_element(r=self.r_target, ntheta=self.ntheta_target).detach().numpy() # (nphi, ntheta_target)
+        dtheta = 2 * torch.pi / self.ntheta_target
+        dphi = 2 * torch.pi / self.stel.nfp / self.stel.nphi
+        dA = self.stel.nfp * dA * dtheta * dphi * self.stel.d_varphi_d_phi[:, None].detach().numpy() # (nphi, ntheta_target)
+        X_target = self.stel.surface(r=self.r_target, ntheta=self.ntheta_target).reshape((-1, 3)) # (nphi, ntheta_target, 3)
+        X_target_np = np.ascontiguousarray(X_target.detach().numpy()) # (nphi * ntheta_target, 3)
+        self.bs.set_points(X_target_np)
+        
+        v = 2 * (B_coil - B_external) * dA[:, :, None] / bottom.detach().numpy()
+        v = v.reshape((-1, 3)) # (nphi * ntheta_target, 3)
+
+        # dont compute anything if biot savart dofs are all fixed
+        if np.any(self.bs.dofs_free_status):
+            dJ_by_dbs = self.bs.B_vjp(v) # Derivative object
+        else:
+            dJ_by_dbs = Derivative()
+
+        """ Derivative w.r.t. axis coeffs """
+        
+        # dont compute anything if axis dofs are all fixed
+        if np.any(self.stel.dofs_free_status):
+
+            # this part of the derivative treats B_coil as a constant, independent of the axis
+            dloss_by_ddofs = self.stel.total_derivative(loss) # list
+
+            # derivative of B_coil(xyz(axis_coeffs)) term w.r.t. axis coeffs
+            dB_by_dX_bs = self.bs.dB_by_dX() # (ntarget, 3, 3)
+            term21 = np.einsum("ji,jki->jk", v, dB_by_dX_bs) # (ntarget, 3)
+            dofs = self.stel.get_dofs(as_tuple=True)
+            term2 = self.stel.total_derivative(torch.sum(X_target * torch.tensor(term21)))
+
+            # sum the two parts of the derivative
+            derivs_axis = np.zeros(0)
+            for ii, x in enumerate(dofs):
+                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy() + term2[ii].detach().numpy()
+                derivs_axis = np.append(derivs_axis, dJ_by_dx)
+
+            # make a derivative object
+            dJ_by_daxis = Derivative({self.stel: derivs_axis})
+        else:
+            dJ_by_daxis = Derivative()
+
+        dJ = dJ_by_daxis + dJ_by_dbs
+
+        return dJ
+
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.field_error().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dfield_error()
 
     
 class IotaPenalty(Optimizable):
