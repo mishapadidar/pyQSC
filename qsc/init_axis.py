@@ -186,7 +186,7 @@ def init_axis(self):
     # (2) Z0c is nonzero, (3) sigma_initial is nonzero, or (B2s is
     # nonzero and order != 'r1')
     self.lasym = torch.max(torch.abs(self.rs)) > 0 or torch.max(torch.abs(self.zc)) > 0 \
-        or self.sigma0 != 0 or (self.order != 'r1' and self.B2s != 0)
+        or self.sigma0 != 0 or (self.B2s != 0 and self.order != 'r1')
     self.stellsym = not self.lasym
 
     # TODO: use torch interpolation here
