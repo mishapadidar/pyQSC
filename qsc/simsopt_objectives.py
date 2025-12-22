@@ -1845,3 +1845,146 @@ class SquaredFlux(Optimizable):
         return self.dsquared_flux()
 
 
+class CoilMagneticEnergy(Optimizable):
+    def __init__(self, bs, stel, r, ntheta=64, vacuum_component=False, rescale=True):
+        """
+        Compute the normalized magnetic energy of the coil field on a flux surface,
+            J = (1/2mu0) int |Bcoil|^2 dA
+        If rescale=True, then we omit the factor of mu0,
+            J = (1/2) int |Bcoil|^2 dA.
+        Rescaling is useful for keeping quantities roughly unit scale.
+
+        Args:
+            bs (biotsavart): a BiotSavart object.
+            stel (QscOptimizable): a QscOptimizable object.
+            r (float): minor radius of the flux surface on which to evaluate the objective.
+            ntheta (int, optional): number of theta quadrature points. Defaults to 64.
+            vacuum_component (bool, optional): whether to take the integral over the the vacuum component 
+                of the surface, i.e. the surface computed when p2=I2=0. Defaults to True.
+        """
+        self.bs = bs
+        self.stel = stel
+        self.r = r
+        self.ntheta = ntheta
+        self.vacuum_component = vacuum_component
+        if rescale:
+            self.mu0 = 1.0
+        else:
+            self.mu0 = 4 * np.pi * 1e-7
+        self.rescale = rescale
+        self.need_to_run_code = True
+        Optimizable.__init__(self, depends_on=[bs, stel])
+
+    def recompute_bell(self, parent=None):
+        """
+        This function will get called any time any of the DOFs of the
+        parent class change.
+        need_to_run_code signifies the need to reevaluate the field_error method.
+        """
+        self.need_to_run_code = True
+        return super().recompute_bell(parent)
+
+    def obj(self):
+        """
+        Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        if not self.need_to_run_code:
+            return self.loss
+        
+        # evaluate coil field
+        xyz = self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        xyz_np = xyz.detach().numpy().reshape((-1, 3)) # (nphi * ntheta, 3)
+        xyz_np = np.ascontiguousarray(xyz_np) # (nphi, 3)
+
+        # compute B * normal
+        self.bs.set_points(xyz_np)
+        B_coil = self.bs.B().reshape(self.stel.nphi, self.ntheta, 3) # (nphi, ntheta, 3)
+        B_coil = torch.tensor(B_coil) # convert to tensor
+        Bsquared = torch.sum(B_coil**2, dim=-1)
+        
+        # compute loss
+        loss = (0.5 / self.mu0) * self.stel.surface_integral(Bsquared, r=self.r, vacuum_component=self.vacuum_component)
+        
+        self.need_to_run_code = False
+        self.loss = loss
+        return loss
+
+    def dobj(self):
+        """
+        Compute the derivative of squaredflux w.r.t all coil DOFS and axis DOFS.
+
+        Returns:
+            SIMSOPT Derivative object containing the derivatives.
+        """
+        self.obj() # ensure loss is computed
+
+        loss = torch.clone(self.loss)
+
+        xyz = self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        xyz_np = xyz.detach().numpy().reshape((-1, 3)) # (N, 3)
+        xyz_np = np.ascontiguousarray(xyz_np) # (N, 3)
+        self.bs.set_points(xyz_np)
+        
+        B_coil = self.bs.B().reshape((-1, self.ntheta, 3)) # (nphi, ntheta, 3)
+
+        dA = self.stel.surface_area_element(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component)[:, :, None] # (nphi, ntheta, 1)
+        dphi = 2 * np.pi / self.stel.nfp / self.stel.nphi
+        dtheta = 2 * np.pi / self.ntheta
+        dA *= self.stel.d_varphi_d_phi[:, None, None] * dphi * dtheta # (nphi, ntheta, 1)
+        dA = dA.detach().numpy()
+
+        # derivative with respect to biot savart dofs
+        top_inner =   self.stel.nfp * (0.5 / self.mu0) * 2 * (dA * B_coil)
+        dJ_by_dbs = self.bs.B_vjp(top_inner.reshape((-1,3))) # Derivative object
+
+
+        """ Derivative w.r.t. axis coeffs """
+        # dont compute anything if axis dofs are all fixed
+        if np.any(self.stel.dofs_free_status):
+            # this part of the derivative treats B_coil as a constant, independent of the axis
+            dloss_by_ddofs = self.stel.total_derivative(loss) # list
+
+            # derivative of B_coil(xyz(axis_coeffs)) term
+            dofs = self.stel.get_dofs(as_tuple=True)
+            dB_by_dX_bs = self.bs.dB_by_dX().reshape((-1, self.ntheta, 3, 3)) # (nphi, ntheta, 3, 3)
+            term21 = np.einsum("ijk,ijkl->ijl", top_inner, dB_by_dX_bs) # (nphi, ntheta, 3)
+            term2 = self.stel.total_derivative(torch.sum(torch.tensor(term21) * xyz)) # list
+
+            derivs_axis = np.zeros(0)
+            for ii, x in enumerate(dofs):
+                # sum the two parts of the derivative
+                dJ_by_dx = dloss_by_ddofs[ii].detach().numpy()
+                if term2[ii] is not None:
+                    dJ_by_dx += term2[ii].detach().numpy()
+                derivs_axis = np.append(derivs_axis, dJ_by_dx)
+
+            # make a derivative object
+            dJ_by_daxis = Derivative({self.stel: derivs_axis})
+
+            dJ = dJ_by_daxis + dJ_by_dbs
+        else:
+            dJ = dJ_by_dbs
+
+        return dJ
+
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
+
+
