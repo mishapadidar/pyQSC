@@ -225,8 +225,11 @@ def from_vmec(cls, v, n_fourier=10, **kwargs):
         x = r * r * np.sin(2 * (vartheta))
         B2s = np.mean((modB_shifted) * x) / np.mean(x**2)
 
+    # rule of thumb for nphi
+    nphi = 9 * n_fourier + 1
+
     add_default_args(kwargs, rc=rc, zs=zs, nfp=nfp, etabar=etabar, B0=B0,
-                 I2=I2, nphi=nphi_booz, B2s=B2s, B2c=B2c, p2=p2, order="r3",
+                 I2=I2, nphi=nphi, B2s=B2s, B2c=B2c, p2=p2, order="r3",
                  spsi=spsi, sG=sG)
     stel = cls(**kwargs)
 
