@@ -5,10 +5,10 @@ from qsc.fourier_tools import (fourier_interp1d, fourier_interp2d,
                                fourier_differentiation, fourier_interp1d_regular_grid,
                                fourier_interp2d_regular_grid, fourier_coeffs)
     
-def test_fourier_interp():
-    """ 1D fourier interpolation """
+def test_fourier_interp1d():
+    """ Test fourier_interp1d """
 
-    # Example usage
+    # test a 1d function
     n = 30
     period = 2*torch.pi*5
     x = torch.tensor(np.linspace(0, period, n, endpoint=False))
@@ -19,12 +19,88 @@ def test_fourier_interp():
     # interpolation error
     err = torch.max(torch.abs(fx - fourier_interp1d(fx, x, period=period)))
     print('1D interpolation error', err)
-    assert err < 1e-14, "1D interpolation failed"
+    assert err < 1e-14, "fourier_interp1d failed"
 
     plt.plot(x, fx.detach().numpy(), 'o', label='Sample Points')
     plt.plot(y, fy.detach().numpy(), '-', label='Interpolated')
     plt.legend()
     plt.show()
+
+    """
+    Interpolation of 2d function
+    """
+    n = 17
+    period = 2*torch.pi*5
+    xlin = torch.tensor(np.linspace(0, period, n, endpoint=False))
+    zlin = torch.tensor(np.linspace(0, 1.3, 2*n, endpoint=False))  # second variable
+    x, z = torch.meshgrid(xlin, zlin, indexing='ij')
+    f = lambda x, z: torch.sin(4*x/5) + torch.cos(z) + torch.cos(x/5) + torch.sin(2*z)
+    fx = f(x, z)
+
+    # interpolation error
+    err = torch.max(torch.abs(fx - fourier_interp1d(fx, xlin, period=period, dim=0)))
+    print('2D interpolation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+
+    # error when using more evaluation points than original
+    ylin = torch.linspace(0, period, 500)
+    y, z = torch.meshgrid(ylin, zlin, indexing='ij')
+    fy = f(y, z)
+    fy_interp = fourier_interp1d(fx, ylin, period=period, dim=0)
+    err = torch.max(torch.abs(fy_interp - fy))
+    print('2D evaluation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+
+    # error when using less evaluation points than original
+    ylin = torch.linspace(0, period, 3)
+    y, z = torch.meshgrid(ylin, zlin, indexing='ij')
+    fy = f(y, z)
+    fy_interp = fourier_interp1d(fx, ylin, period=period, dim=0)
+    err = torch.max(torch.abs(fy_interp - fy))
+    print('2D evaluation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+
+    """
+    Interpolation of 3d function
+    """
+    n = 19
+    period1 = 2*torch.pi*3.3
+    period2 = 1.3
+    period3 = 0.7
+    x1lin = torch.tensor(np.linspace(0, period1, n, endpoint=False))
+    x2lin = torch.tensor(np.linspace(0, period2, 2*n, endpoint=False))  # second variable
+    x3lin = torch.tensor(np.linspace(0, period3, 3*n, endpoint=False))  # third variable
+    x1, x2, x3= torch.meshgrid(x1lin, x2lin, x3lin, indexing='ij')
+    f = lambda x1,x2,x3: torch.sin(2*np.pi*x1/period1) #+ 9 * torch.cos(8*2*np.pi*x1/period1)+ torch.cos(2*np.pi*x2/period2) + 0.44*torch.cos(2*np.pi*x3/period3) + torch.sin(2*np.pi*2*x3/period3)
+    fx = f(x1, x2, x3)
+
+    # interpolation error
+    err = torch.max(torch.abs(fx - fourier_interp1d(fx, x1lin, period=period1, dim=0)))
+    print('3D interpolation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+    err = torch.max(torch.abs(fx - fourier_interp1d(fx, x2lin, period=period2, dim=1)))
+    print('3D interpolation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+    err = torch.max(torch.abs(fx - fourier_interp1d(fx, x3lin, period=period3, dim=2)))
+    print('3D interpolation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+
+    # interpolate to other points
+    x1eval = torch.linspace(0, period1, 717)
+    fx_eval = f(x1eval[:,None,None], x2lin[None,:,None], x3lin[None,None,:])
+    err = torch.max(torch.abs(fx_eval - fourier_interp1d(fx, x1eval, period=period1, dim=0)))
+    print('3D evaluation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+    x2eval = torch.linspace(0, period2, 503)
+    fx_eval = f(x1lin[:,None,None], x2eval[None,:,None], x3lin[None,None,:])
+    err = torch.max(torch.abs(fx_eval - fourier_interp1d(fx, x2eval, period=period2, dim=1)))
+    print('3D evaluation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
+    x3eval = torch.linspace(0, period3, 401)
+    fx_eval = f(x1lin[:,None,None], x2lin[None,:,None], x3eval[None,None,:])
+    err = torch.max(torch.abs(fx_eval - fourier_interp1d(fx, x3eval, period=period3, dim=2)))
+    print('3D evaluation error', err)
+    assert err < 1e-14, "fourier_interp1d failed"
 
 def test_fourier_interp1d_regular_grid():
     """ 1D fourier interpolation """
@@ -354,7 +430,7 @@ def test_fourier_coeffs():
 
 
 if __name__ == "__main__":
-    test_fourier_interp()
+    test_fourier_interp1d()
     test_fourier_interp2d()
     test_fourier_interp1d_regular_grid()
     test_fourier_interp2d_regular_grid()

@@ -5,25 +5,44 @@ from torch.fft import fft, fftfreq, fft2, ifft, fftshift
 torch.set_default_dtype(torch.float64)
 
 
-def fourier_interp1d(fx, points, period = 1.0):
-    """Fourier interpolation on [0, period) interval. For faster evaluation
-    of the interpolant on a regular grid of evaluation points, use
+def fourier_interp1d(fx, points, period = 1.0, dim=-1):
+    """Fourier interpolation over one dimension of a function with one or more inputs. 
+    For faster evaluation of the interpolant on a regular grid of evaluation points, use
     fourier_interp1d_regular_grid.
 
+    Example:
+        Suppose f has two arguments f(x,y) and we want to interpolate in x only, keeping y
+        fixed. Do
+        >>> fxy = f(X, Y) # shape (n, m)
+        >>> points = torch.linspace(0, period, 200) # shape (p,)
+        >>> fxy_interp = fourier_interp1d(fxy, points, period=period, dim=0) # shape (p, m)
+
     Args:
-        fx (array): uniformly spaced evaluations of f(x) on [0, period). Make sure
-            x was spaced using linspace(0, period, n, endpoint=False).
-        points (array): points at which to evaluate the interpolant.
+        fx (tensor): n-dim tensor of uniformly spaced evaluations of f(x) on [0, period). Make sure
+            x was spaced using linspace(0, period, n, endpoint=False). It is assumed that
+            the evaluation are along the axis specified by `axis`. 
+        points (tensor): 1d-tensor of points at which to evaluate the interpolant.
         period (float): period of the function.
+        axis (int): axis along which the evaluations in fx are taken.
 
     Returns:
         array: len(points) array of interpolated values of f.
     """
-    coeffs = fft(fx)
-    size = len(coeffs)
+    assert points.ndim == 1, "points must be a 1D array"
+    coeffs = fft(fx, dim=dim) # fx.shape
+    size = coeffs.shape[dim]
     kn = fftfreq(size, period / size)
-    eikx = torch.exp(2.j * torch.pi * torch.outer(points, kn))
-    return torch.real(torch.matmul(eikx, coeffs) / size)
+    eikx = torch.exp(2.j * torch.pi * torch.outer(points, kn)) # (n_points, size)
+
+    if fx.ndim == 1:
+        # fast 1d formula
+        return torch.real(torch.matmul(eikx, coeffs) / size)
+
+    # move interpolation axis to the first dimension
+    coeffs_moved = coeffs.movedim(dim, 0)
+    out = torch.real(torch.einsum('ij,j...->i...',eikx, coeffs_moved) / size)
+    out = out.movedim(0, dim)
+    return out
 
 def fourier_coeffs(fx):
     """Compute the Fourier coefficients of a periodic function given
