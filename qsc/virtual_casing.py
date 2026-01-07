@@ -9,7 +9,8 @@ import numpy as np
 from functools import lru_cache
 import torch
 from .util import rotate_nfp
-from .fourier_tools import fourier_interp2d_regular_grid
+from .fourier_tools import fourier_interp1d
+from torch.special import erf
 
 
 #logging.basicConfig(level=logging.INFO)
@@ -169,7 +170,8 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
     else:
         # use Taylor expansion method
         # TODO: use corrected method instead
-        return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+        # return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+        return self.B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
     
 def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle. If the
@@ -190,8 +192,9 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
     else:
         # use Taylor expansion method
         # TODO: use corrected method instead
-        return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
-    
+        # return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+        return self.grad_B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
+
 @lru_cache(maxsize=8)
 def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], vacuum_component=False):
     """Compute B_external on the magnetic axis using the virtual casing principle,
@@ -214,6 +217,7 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], v
     Returns:
         (tensor): (3, n) tensor of evaluations of B_external.
     """
+    # TODO: rename this method since target points need not be on axis
     if len(X_target) == 0:
         X_target = torch.clone(self.XYZ0.T) # (nphi, 3)
     n_target = len(X_target)
@@ -236,8 +240,6 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], v
     #     n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
 
     # # interpolate
-    # n_cross_B_interp = fourier_interp2d_regular_grid(n_cross_B, nphi, ntheta) # (nphi, ntheta, 3)
-    # gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
     n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
 
     dtheta = 2 * torch.pi / ntheta
@@ -283,6 +285,7 @@ def grad_B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=
         (tensor): (3, 3, n) tensor of evaluations of B_external. 
             The gradient is a symmetric matrix at each target point.
     """
+    # TODO: rename this method since target points need not be on axis
 
     if len(X_target) == 0:
         X_target = self.XYZ0.T # (nphi, 3)
@@ -304,9 +307,7 @@ def grad_B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=
     #     nb = rotate_nfp(nb, 1, self.nfp)
     #     n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
 
-    # # interpolate
-    # surface_current = fourier_interp2d_regular_grid(n_cross_B, nphi, ntheta) # (nphi, ntheta, 3)
-    # gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
+    # interpolate
     n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
 
 
@@ -351,7 +352,6 @@ def B_external_on_axis_corrected(self, r=0.1, ntheta=256, nphi=1024):
     Returns:
         (tensor): (3, nphi) tensor of evaluations of B_external on the magnetic axis nodes.
     """
-    # TODO: test this method
     Bvac = self.Bfield_cartesian() # (3, nphi)
     Bext = B_external_on_axis_taylor(self, r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
     Bext_vac = B_external_on_axis_taylor(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=True) # (3, nphi)
@@ -373,7 +373,6 @@ def grad_B_external_on_axis_corrected(self, r=0.1, ntheta=256, nphi=1024):
         (tensor): (3, 3, n) tensor of evaluations of B_external. 
             The gradient is a symmetric matrix at each target point.
     """
-    # TODO: test this method
     # compute Bext using Taylor expansion
     gradB_ext = B_external_on_axis_taylor(self, r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
     # compute correction terms
@@ -413,9 +412,10 @@ def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, vacuum
         nb = rotate_nfp(nb, 1, self.nfp)
         n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
 
-    # TODO: only interpolate in phi, not theta
-    # interpolate
-    n_cross_B_interp = fourier_interp2d_regular_grid(n_cross_B, nphi, ntheta) # (nphi, ntheta, 3)
-    gamma_surf_interp = fourier_interp2d_regular_grid(gamma_surf, nphi, ntheta) # (nphi, ntheta, 3)
+    # interpolate only in phi
+    period = 2 * torch.pi
+    points = torch.linspace(0, period, nphi+1)[:-1] # linspace(..., endpoint=False)
+    n_cross_B_interp = fourier_interp1d(n_cross_B, points, period = period, dim=0) # (nphi, ntheta, 3)
+    gamma_surf_interp = fourier_interp1d(gamma_surf, points, period = period, dim=0) # (nphi, ntheta, 3)
 
     return n_cross_B_interp, gamma_surf_interp
