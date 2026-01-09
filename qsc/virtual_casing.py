@@ -168,8 +168,6 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
         # in vacuum, return vacuum solution
         return self.Bfield_cartesian()
     else:
-        # use Taylor expansion method
-        # TODO: use corrected method instead
         # return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
         return self.B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
     
@@ -190,8 +188,6 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
         # in vacuum, return vacuum solution
         return self.grad_B_tensor_cartesian()
     else:
-        # use Taylor expansion method
-        # TODO: use corrected method instead
         # return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
         return self.grad_B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
         
@@ -221,23 +217,6 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], v
     if len(X_target) == 0:
         X_target = torch.clone(self.XYZ0.T) # (nphi, 3)
     n_target = len(X_target)
-
-    # TODO: use interpolants
-    # # components of integrand
-    # dvarphi_by_dphi = torch.clone(self.d_varphi_d_phi)
-    # n = self.surface_normal(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
-    # g = self.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
-    # b = self.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
-    # nb = torch.linalg.cross(n, b) * dvarphi_by_dphi.reshape((-1,1,1))
-
-    # # map out full torus
-    # gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    # n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    # for ii in range(self.nfp):
-    #     g = rotate_nfp(g, 1, self.nfp)
-    #     gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-    #     nb = rotate_nfp(nb, 1, self.nfp)
-    #     n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
 
     # # interpolate
     n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
@@ -438,33 +417,39 @@ def grad_B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=
     # TODO: rename this method since target points need not be on axis
 
     if len(X_target) == 0:
-        X_target = self.XYZ0.T # (nphi, 3)
+        X_target = torch.clone(self.XYZ0.T) # (nphi, 3)
     n_target = len(X_target)
-
-    # # components of integrand
-    # dvarphi_by_dphi = self.d_varphi_d_phi
-    # n = self.surface_normal(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
-    # g = self.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
-    # b = self.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
-    # nb = torch.linalg.cross(n, b) * dvarphi_by_dphi.reshape((-1,1,1))
-
-    # # map out full torus
-    # gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    # n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    # for ii in range(self.nfp):
-    #     g = rotate_nfp(g, 1, self.nfp)
-    #     gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-    #     nb = rotate_nfp(nb, 1, self.nfp)
-    #     n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
 
     # interpolate
     n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
+    
+    # compute integral
+    B_ext = grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, ntheta, nphi)
 
+    return B_ext
 
+@torch.compile
+def grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, ntheta, nphi):
+    """Evaluate the integral for grad_B_external_on_axis_taylor. This function has been separated
+    to enable torch.compile. Compilation speeds up repeated integral evaluation, but may slow the first 
+    evaluation.
+
+    Args:
+        X_target (tensor): (n, 3) tensor of n target points inside the surface
+            of radius r at which to evaluate B_external. The points do not necessarily need
+            to be on magnetic axis.
+        gamma_surf_interp (tensor): (nphi, ntheta, 3) tensor of flux surface coordinates.
+        n_cross_B_interp (tensor): (nphi, ntheta, 3) tensor of n x B on the flux surface.
+        ntheta (int): number of theta quadrature points.
+        nphi (int): number of phi quadrature points.
+
+    Returns:
+        B_ext: (tensor): (3, 3, n) tensor of evaluations of B_external.
+    """
+    n_target = len(X_target)
     dtheta = 2 * torch.pi / ntheta
     dphi = 2 * torch.pi / nphi
     eye = torch.eye(3)
-    
     B_ext = torch.zeros((3, 3, n_target))
     for ii in range(n_target):
         # biot-savart kernel
@@ -481,7 +466,6 @@ def grad_B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=
             integrand = torch.linalg.cross(dkernel_by_djj, n_cross_B_interp, dim=-1) # (nphi, ntheta, 3)
 
             B_ext[:, jj, ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
-
     return B_ext
 
 @lru_cache(maxsize=8)
@@ -554,13 +538,6 @@ def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, vacuum
     nb = torch.linalg.cross(n, b) * dvarphi_by_dphi.reshape((-1,1,1))
 
     # map out full torus
-    # gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    # n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
-    # for ii in range(self.nfp):
-    #     g = rotate_nfp(g, 1, self.nfp)
-    #     gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
-    #     nb = rotate_nfp(nb, 1, self.nfp)
-    #     n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
     gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
     n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
     gamma_surf[ : self.nphi] = g

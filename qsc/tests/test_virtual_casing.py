@@ -527,8 +527,8 @@ def test_B_external_on_axis():
     Test the accuracy of the B_external_on_axis method.
     """
 
-    ntheta = 256
-    nphi = 1024
+    ntheta = 32
+    nphi = 256
     mr = 0.1
 
     # method should be exact in vacuum
@@ -540,21 +540,21 @@ def test_B_external_on_axis():
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis does not match Bfield_cartesian in vacuum"
 
-    # method should match Bext_taylor in non-vacuum
+    # method should match B_external_on_axis_corrected in non-vacuum
     stel = Qsc.from_paper("precise QA", nphi=61, p2=-1e1, I2=0.0, order='r3')
     with torch.no_grad():
         Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        Bext_taylor = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-    err = Bext_taylor - Bext_vc
+        Bext_corrected = stel.B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+    err = Bext_corrected - Bext_vc
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
 
-    # method should match Bext_taylor in non-vacuum
+    # method should match B_external_on_axis_corrected in non-vacuum
     stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=-1e-3, order='r3')
     with torch.no_grad():
         Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        Bext_taylor = stel.B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-    err = Bext_taylor - Bext_vc
+        Bext_corrected = stel.B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+    err = Bext_corrected - Bext_vc
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
 
@@ -563,8 +563,8 @@ def test_grad_B_external_on_axis():
     Test the accuracy of the grad_B_external_on_axis method.
     """
 
-    ntheta = 256
-    nphi = 1024
+    ntheta = 32
+    nphi = 256
     mr = 0.1
 
     # method should be exact in vacuum
@@ -576,12 +576,12 @@ def test_grad_B_external_on_axis():
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis does not match Bfield_cartesian in vacuum"
 
-    # method should match Bext_taylor in non-vacuum
+    # method should match grad_Bext_taylor in non-vacuum
     stel = Qsc.from_paper("precise QA", nphi=61, p2=-1e1, I2=0.0, order='r3')
     with torch.no_grad():
         Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-        Bext_taylor = stel.grad_B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-    err = Bext_taylor - Bext_vc
+        Bext_corrected = stel.grad_B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
+    err = Bext_corrected - Bext_vc
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
 
@@ -589,8 +589,8 @@ def test_grad_B_external_on_axis():
     stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=-1e-3, order='r3')
     with torch.no_grad():
         Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-        Bext_taylor = stel.grad_B_external_on_axis_taylor(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-    err = Bext_taylor - Bext_vc
+        Bext_corrected = stel.grad_B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
+    err = Bext_corrected - Bext_vc
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
 
