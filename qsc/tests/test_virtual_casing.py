@@ -72,6 +72,30 @@ def test_B_external_on_axis_taylor():
     t1 = time.time()
     assert t1 - t0 < 1e-4, "Caching of B_external_on_axis_taylor failed"
 
+
+def test_B_external_on_axis_taylor_singularity_subtraction():
+    """
+    Test the accuracy of the B_external_on_axis_taylor_singularity_subtraction computation
+    """
+    from qsc.virtual_casing import B_external_on_axis_taylor_singularity_subtraction
+
+    ntheta = 128
+    designs = ["precise QA", "precise QH", "2022 QH nfp3 beta"]
+    for des in designs:
+        stel = Qsc.from_paper(des, nphi=99, order='r3')
+
+        with torch.no_grad():
+            Bext_vc = B_external_on_axis_taylor_singularity_subtraction(stel, r=0.1, ntheta=ntheta) # (3, nphi)
+            Bext_taylor = stel.B_external_on_axis_taylor(r=0.1, ntheta=ntheta, nphi=2048) # (3, nphi)
+        
+        Bext = stel.Bfield_cartesian() # (3, nphi)
+        err = torch.max(torch.abs(Bext - Bext_vc)).detach().numpy()
+        err_taylor = torch.max(torch.abs(Bext - Bext_taylor)).detach().numpy()
+        print(err, err_taylor)
+        
+        # np.testing.assert_allclose(err, err_taylor, rtol=0.1)
+
+
 def test_grad_B_external_on_axis_taylor_converges():
     """
     Show that the computation of grad_B_external_on_axis_taylor converges with nphi.
@@ -573,6 +597,7 @@ def test_grad_B_external_on_axis():
 
 if __name__ == "__main__":
     test_B_external_on_axis_taylor()
+    test_B_external_on_axis_taylor_singularity_subtraction()
     test_grad_B_external_on_axis_taylor_converges()
     test_grad_B_external_on_axis_taylor_accuracy()
     test_grad_B_external_on_axis_taylor_consistency()

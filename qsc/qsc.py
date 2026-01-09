@@ -44,6 +44,7 @@ class Qsc(torch.nn.Module):
     from .util import B_mag
     from .virtual_casing import (B_taylor,
                                  B_external_on_axis_taylor,
+                                 B_external_on_axis_taylor_singularity_subtraction,
                                  grad_B_external_on_axis_taylor,
                                  B_external_on_axis,
                                  grad_B_external_on_axis,
@@ -51,6 +52,7 @@ class Qsc(torch.nn.Module):
                                  grad_B_external_on_axis_corrected,
                                  build_virtual_casing_interpolants,
                                  curl_taylor, divergence_taylor,
+                                 build_virtual_casing_grid,
                                  )
     from .configurations import from_paper, configurations
     from .objectives import (Bfield_axis_mse, grad_B_tensor_cartesian_mse, grad_grad_B_tensor_cartesian_mse, total_derivative,
@@ -173,11 +175,13 @@ class Qsc(torch.nn.Module):
         Clear the cached values for the virtual casing and other.
         """
         # clear the cached values
+        self.build_virtual_casing_grid.cache_clear()
         self.build_virtual_casing_interpolants.cache_clear()
         self.B_external_on_axis_corrected.cache_clear()
         self.grad_B_external_on_axis_corrected.cache_clear()
         self.B_external_on_axis_taylor.cache_clear()
         self.grad_B_external_on_axis_taylor.cache_clear()
+        self.B_external_on_axis_taylor_singularity_subtraction.cache_clear()
     
     def get_dofs(self, as_tuple=False):
         """
