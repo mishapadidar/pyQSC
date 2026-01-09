@@ -3,7 +3,7 @@
 """
 Methods for computing the flux surface geometry
 """
-
+from functools import lru_cache
 import logging
 import numpy as np
 import torch
@@ -12,6 +12,7 @@ from .util import rotate_nfp, Struct
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@lru_cache(maxsize=2)
 def _load_components(self, vacuum_component=False):
     """Build a Struct object with the untwisted Fourier components of the flux
     surface shape, X1c_untwisted, X1s_untwisted, etc as attributes. If vacuum_component
@@ -78,6 +79,7 @@ def _load_components(self, vacuum_component=False):
 
     return out
 
+@lru_cache(maxsize=8)
 def surface(self, r, ntheta=64, vacuum_component=False):
     """Compute points on a flux surface with radius r. The quadrature points are 
     uniformly spaced in Boozer poloidal angle, theta, and the axis cylindrical angle,
@@ -145,6 +147,7 @@ def surface(self, r, ntheta=64, vacuum_component=False):
             
     return xyz
 
+@lru_cache(maxsize=8)
 def dsurface_by_dvarphi(self, r, ntheta=64, vacuum_component=False):
     """Compute the derivative of the flux surface map surface(r, theta, varphi) with respect to varphi.
 
@@ -272,6 +275,7 @@ def dsurface_by_dvarphi(self, r, ntheta=64, vacuum_component=False):
 
     return xyz
 
+@lru_cache(maxsize=8)
 def dsurface_by_dtheta(self, r, ntheta=64, vacuum_component=False):
     """Compute the derivative of the flux surface map with respect to the
     Boozer poloidal angle, theta.
@@ -331,6 +335,7 @@ def dsurface_by_dtheta(self, r, ntheta=64, vacuum_component=False):
             
     return xyz
 
+@lru_cache(maxsize=8)
 def d2surface_by_dthetatheta(self, r, ntheta=64, vacuum_component=False):
     """Compute the second derivative of the flux surface map with respect to the
     Boozer poloidal angle, theta.
@@ -389,6 +394,7 @@ def d2surface_by_dthetatheta(self, r, ntheta=64, vacuum_component=False):
             
     return xyz
 
+@lru_cache(maxsize=8)
 def dsurface_by_dr(self, r, ntheta=64, vacuum_component=False):
     """Compute the derivative of the flux surface map with respect to the
     minor radius coordinate, r.
@@ -453,6 +459,7 @@ def dsurface_by_dr(self, r, ntheta=64, vacuum_component=False):
             
     return xyz
 
+@lru_cache(maxsize=8)
 def surface_normal(self, r, ntheta=64, vacuum_component=False):
     """Compute the normal vectors to a flux surface with radius r.
     
@@ -476,7 +483,7 @@ def surface_normal(self, r, ntheta=64, vacuum_component=False):
     normal = torch.linalg.cross(gd2, gd1, dim=-1) # (nphi, ntheta, 3)
     return normal
 
-
+@lru_cache(maxsize=8)
 def jacobian(self, r, ntheta=64, vacuum_component=False):
     """Compute the Jacobian of the the coordinate transformation from (r, theta, varphi),
         sqrt{g} = d(surface)/dr * (d(surface)/dtheta x d(surface)/dvarphi).
@@ -498,6 +505,7 @@ def jacobian(self, r, ntheta=64, vacuum_component=False):
     jacobian_det = torch.sum(dsurface_by_dr * normal, axis=-1) # (nphi, ntheta)
     return jacobian_det
 
+@lru_cache(maxsize=8)
 def surface_area_element(self, r, ntheta=64, vacuum_component=False):
     """Compute the area element with respect to theta and varphi (not phi) of a flux surface with radius r.
 
@@ -516,6 +524,7 @@ def surface_area_element(self, r, ntheta=64, vacuum_component=False):
     dA = torch.linalg.norm(normal, dim=-1) # (nphi, ntheta)
     return dA
 
+@lru_cache(maxsize=8)
 def surface_area(self, r, ntheta=64, vacuum_component=False):
     """Compute the area of a flux surface with radius r.
 
@@ -534,6 +543,7 @@ def surface_area(self, r, ntheta=64, vacuum_component=False):
     area = self.surface_integral(X, r, vacuum_component=vacuum_component)
     return area
 
+@lru_cache(maxsize=8)
 def surface_theta_curvature(self, r, ntheta=64, vacuum_component=False):
     """Compute the curvature of a flux surface, with radius r, in the theta direction,
         kappa = || dsurface/dtheta x d^2surface/(dtheta^2)|| / ||dsurface/dtheta||^3.

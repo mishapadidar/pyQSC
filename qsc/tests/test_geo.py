@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from qsc.util import finite_difference_torch
 from unittest.mock import patch
+import time
 
 def test_load_components():
     """Test the _load_components method of Qsc."""
@@ -49,7 +50,7 @@ def test_surface():
     plt.show()
 
     # test the vacuum_component=True argument
-    names = ["precise QH", "precise QA"]
+    names = ["precise QA", "precise QH"]
     for name in names:
         stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
         stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
@@ -61,6 +62,22 @@ def test_surface():
         assert torch.allclose(xyz_stel_vac, xyz_vac_stel_vac, atol=1e-14), "Vacuum surface mismatch in vacuum case"
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(xyz_vac_stel, xyz_stel_vac, atol=1e-14), "Vacuum surface mismatch between nonvac and vac case"
+
+        # test the cache works
+        v1 = stel.surface(r=minor_radius, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.surface(r=minor_radius, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of surface failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of surface failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
 
 def test_surface_tangents():
     # set up the expansion
@@ -104,29 +121,77 @@ def test_surface_tangents():
         stel = Qsc.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
         stel_vac = Qsc.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
 
-        dxyz_by_dvarphi_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
-        dxyz_by_dvarphi_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
-        dxyz_by_dvarphi_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dvarphi_vac_stel = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dvarphi_stel_vac = stel_vac.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        dxyz_by_dvarphi_vac_stel_vac = stel_vac.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
         # in vacuum, total vacuum solution and vacuum components should match
         assert torch.allclose(dxyz_by_dvarphi_stel_vac, dxyz_by_dvarphi_vac_stel_vac, atol=1e-14), "Vacuum dsurface_by_dvarphi mismatch in vacuum case"
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(dxyz_by_dvarphi_vac_stel, dxyz_by_dvarphi_stel_vac, atol=1e-14), "Vacuum dsurface_by_dvarphi mismatch between nonvac and vac case"
 
-        dxyz_by_dtheta_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
-        dxyz_by_dtheta_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
-        dxyz_by_dtheta_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dtheta_vac_stel = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dtheta_stel_vac = stel_vac.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        dxyz_by_dtheta_vac_stel_vac = stel_vac.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
         # in vacuum, total vacuum solution and vacuum components should match
         assert torch.allclose(dxyz_by_dtheta_stel_vac, dxyz_by_dtheta_vac_stel_vac, atol=1e-14), "Vacuum dsurface_by_dtheta mismatch in vacuum case"
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(dxyz_by_dtheta_vac_stel, dxyz_by_dtheta_stel_vac, atol=1e-14), "Vacuum dsurface_by_dtheta mismatch between nonvac and vac case"
 
-        dxyz_by_dr_vac_stel = stel.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
-        dxyz_by_dr_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
-        dxyz_by_dr_vac_stel_vac = stel_vac.surface(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dr_vac_stel = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
+        dxyz_by_dr_stel_vac = stel_vac.dsurface_by_dr(r=minor_radius, ntheta=ntheta) # (nphi, ntheta, 3)
+        dxyz_by_dr_vac_stel_vac = stel_vac.dsurface_by_dr(r=minor_radius, ntheta=ntheta, vacuum_component=True) # (nphi, ntheta, 3)
         # in vacuum, total vacuum solution and vacuum components should match
         assert torch.allclose(dxyz_by_dr_stel_vac, dxyz_by_dr_vac_stel_vac, atol=1e-14), "Vacuum dsurface_by_dr mismatch in vacuum case"
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(dxyz_by_dr_vac_stel, dxyz_by_dr_stel_vac, atol=1e-14), "Vacuum dsurface_by_dr mismatch between nonvac and vac case"
+
+        # test the cache works
+        v1 = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of dsurface_by_dvarphi failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.dsurface_by_dvarphi(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of dsurface_by_dvarphi failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+
+        # test the cache works
+        v1 = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of dsurface_by_dtheta failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.dsurface_by_dtheta(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of dsurface_by_dtheta failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        
+        # test the cache works
+        v1 = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of dsurface_by_dr failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.dsurface_by_dr(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of dsurface_by_dr failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
 
 def test_surface_normal():
     """Test the surface_normal method."""
@@ -175,6 +240,22 @@ def test_surface_normal():
             print(err.detach().numpy())
             assert err < 1e-14, "vacuum normal not orthogonal to vacuum varphi tangent"
 
+            # test the cache works
+            v1 = stel.surface_normal(r=minor_radius, ntheta=ntheta)
+            t0 = time.time()
+            v2 = stel.surface_normal(r=minor_radius, ntheta=ntheta)
+            t1 = time.time()
+            assert t1 - t0 < 1e-4, "Caching of surface_normal failed"
+            np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+            del v1, v2 # for timing
+            v1 = stel.surface_normal(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+            t0 = time.time()
+            v2 = stel.surface_normal(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+            t1 = time.time()
+            assert t1 - t0 < 1e-4, "Caching of surface_normal failed"
+            np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+            del v1, v2 # for timing
+
 
 def test_second_derivative():
     """ Test the accuracy of the d2surface_by_dthetatheta()."""
@@ -207,6 +288,22 @@ def test_second_derivative():
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(d2theta_vac_stel, d2theta_stel_vac, atol=1e-14), "Vacuum d2surface_by_dthetatheta mismatch between nonvac and vac case"
 
+        # test the cache works
+        v1 = stel.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of d2surface_by_dthetatheta failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.d2surface_by_dthetatheta(r=minor_radius, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of d2surface_by_dthetatheta failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        
 def test_surface_autodiff():
     """
     Test autodifferentation of surface().
@@ -338,7 +435,22 @@ def test_surface_area():
         assert torch.allclose(area_stel_vac, area_vac_stel_vac, atol=1e-14), "surface_area mismatch in vacuum case"
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(area_vac_stel, area_stel_vac, atol=1e-14), "Vacuum surface_area mismatch between nonvac and vac case"
-
+        
+        # test the cache works
+        v1 = stel.surface_area(r=r, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.surface_area(r=r, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of surface_area failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.surface_area(r=r, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.surface_area(r=r, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of surface_area failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
 
 def test_surface_curvature():
     """ Test surface curvature computation """
@@ -376,6 +488,21 @@ def test_surface_curvature():
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(curv_vac_stel, curv_stel_vac, atol=1e-14), "Vacuum surface_theta_curvature mismatch between nonvac and vac case"
 
+        # test the cache works
+        v1 = stel.surface_theta_curvature(r=r, ntheta=ntheta)
+        t0 = time.time()
+        v2 = stel.surface_theta_curvature(r=r, ntheta=ntheta)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of surface_theta_curvature failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
+        v1 = stel.surface_theta_curvature(r=r, ntheta=ntheta, vacuum_component=True)
+        t0 = time.time()
+        v2 = stel.surface_theta_curvature(r=r, ntheta=ntheta, vacuum_component=True)
+        t1 = time.time()
+        assert t1 - t0 < 1e-4, "Caching of surface_theta_curvature failed"
+        np.testing.assert_allclose(v1.detach().numpy(), v2.detach().numpy(), atol=1e-14)
+        del v1, v2 # for timing
 
 
 

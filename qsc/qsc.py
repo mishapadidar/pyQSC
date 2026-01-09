@@ -175,6 +175,7 @@ class Qsc(torch.nn.Module):
         Clear the cached values for the virtual casing and other.
         """
         # clear the cached values
+        # virtual casing
         self.build_virtual_casing_grid.cache_clear()
         self.build_virtual_casing_interpolants.cache_clear()
         self.B_external_on_axis_corrected.cache_clear()
@@ -182,6 +183,18 @@ class Qsc(torch.nn.Module):
         self.B_external_on_axis_taylor.cache_clear()
         self.grad_B_external_on_axis_taylor.cache_clear()
         self.B_external_on_axis_taylor_singularity_subtraction.cache_clear()
+        # geo
+        self._load_components.cache_clear()
+        self.surface.cache_clear()
+        self.dsurface_by_dvarphi.cache_clear()
+        self.dsurface_by_dtheta.cache_clear()
+        self.d2surface_by_dthetatheta.cache_clear()
+        self.dsurface_by_dr.cache_clear()
+        self.surface_normal.cache_clear()
+        self.jacobian.cache_clear()
+        self.surface_area_element.cache_clear()
+        self.surface_area.cache_clear()
+        self.surface_theta_curvature.cache_clear()
     
     def get_dofs(self, as_tuple=False):
         """
