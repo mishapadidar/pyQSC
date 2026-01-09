@@ -1,9 +1,23 @@
 import numpy as np
-# from scipy.fft import fft, fftfreq, fft2, ifft
+from functools import lru_cache
 import torch
 from torch.fft import fft, fftfreq, fft2, ifft, fftshift
 torch.set_default_dtype(torch.float64)
 
+@lru_cache(maxsize=4)
+def fourier_interp1d_coeffs(fx, dim=-1):
+    """
+    Compute the interpolation coefficients for the fourier_interp1d function.
+    This function has been separated to enable caching of the coefficients.
+    
+    Args:
+        fx (tensor): n-dim tensor.
+        dim (int): dimension along which to compute the Fourier coefficients.
+    Returns:
+        coeffs (tensor): Fourier coefficients of fx along dimension dim.
+    """
+    coeffs = fft(fx, dim=dim) # fx.shape
+    return coeffs
 
 def fourier_interp1d(fx, points, period = 1.0, dim=-1):
     """Fourier interpolation over one dimension of a function with one or more inputs. 
@@ -29,7 +43,8 @@ def fourier_interp1d(fx, points, period = 1.0, dim=-1):
         array: len(points) array of interpolated values of f.
     """
     assert points.ndim == 1, "points must be a 1D array"
-    coeffs = fft(fx, dim=dim) # fx.shape
+    # coeffs = fft(fx, dim=dim) # fx.shape
+    coeffs = fourier_interp1d_coeffs(fx, dim=dim)
     size = coeffs.shape[dim]
     kn = fftfreq(size, period / size)
     eikx = torch.exp(2.j * torch.pi * torch.outer(points, kn)) # (n_points, size)
