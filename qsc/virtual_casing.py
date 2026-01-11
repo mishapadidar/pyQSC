@@ -168,8 +168,8 @@ def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
         # in vacuum, return vacuum solution
         return self.Bfield_cartesian()
     else:
-        # return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
-        return self.B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
+        return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+        # return self.B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
     
 def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
     """Compute grad_B_external on the magnetic axis using the virtual casing principle. If the
@@ -188,8 +188,8 @@ def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
         # in vacuum, return vacuum solution
         return self.grad_B_tensor_cartesian()
     else:
-        # return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
-        return self.grad_B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
+        return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
+        # return self.grad_B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
         
 @lru_cache(maxsize=8)
 def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], vacuum_component=False):
