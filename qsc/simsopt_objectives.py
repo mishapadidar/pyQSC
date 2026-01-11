@@ -1988,3 +1988,162 @@ class CoilMagneticEnergy(Optimizable):
         return self.dobj()
 
 
+class VirtualCasingFieldConsistency(Optimizable):
+    def __init__(self, stel, r = 0.1, ntheta=128, nphi=512):
+        """For a vacuum field, the virtual casing principle shows that
+            B_ext = B.
+        Missing high order terms, the NAE does not gaurantee this condition is met, 
+        making the NAE inconsistent.
+
+        This objective penalizes deviations from this condition on the magnetic axis
+            J = \int |B_ext - B|^2 dl / (B0^2 * L)
+        where L is the axis length. B_ext is computed using the virtual casing integral.
+
+        If p2 or I2 is nonzero, this objective will compute B_ext using the vacuum component
+        of the field, i.e. using the NAE with p2=I2=0.
+
+        Args:
+            stel (QscOptimizable): a QscOptimizable object.
+            r (float): minor radius.
+            ntheta (int, optional): Number of theta quadrature points for virtual casing integral.
+                Defaults to 256.
+            nphi (int, optional): Number of phi quadrature points for virtual casing integral.
+                Defaults to 1024.
+        """
+        self.stel = stel
+        self.r = r
+        self.ntheta = ntheta
+        self.nphi = nphi
+        Optimizable.__init__(self, depends_on=[stel])
+
+    def obj(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        B = self.stel.Bfield_cartesian()
+        B_ext = self.stel.B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi, vacuum_component=True) # (3, n)
+        dl = torch.clone(self.stel.d_l)
+        top = torch.sum(torch.sum((B_ext - B)**2, dim=0) * dl) # scalar tensor
+        bot = (self.stel.B0**2) * self.stel.axis_length
+        loss = top / bot
+
+        return loss
+    
+    def dobj(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.stel.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.stel: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
+    
+class VirtualCasingGradientConsistency(Optimizable):
+    def __init__(self, stel, r = 0.1, ntheta=128, nphi=512):
+        """For a vacuum field, the virtual casing principle shows that
+            B_ext = B,
+        and in turn,
+            gradB_ext = gradB.
+        Missing high order terms, the NAE does not guarantee these conditions are met, 
+        making the NAE inconsistent.
+
+        This objective penalizes deviations from the second condition on the magnetic axis
+            J = \int |gradB_ext - gradB|^2 dl / \int |gradB|^2 dl
+        where L is the axis length. gradB_ext is computed using the virtual casing integral.
+
+        If p2 or I2 is nonzero, this objective will compute gradB_ext using the vacuum component
+        of the field, i.e. using the NAE with p2=I2=0.
+
+        Args:
+            stel (QscOptimizable): a QscOptimizable object.
+            r (float): minor radius.
+            ntheta (int, optional): Number of theta quadrature points for virtual casing integral.
+                Defaults to 256.
+            nphi (int, optional): Number of phi quadrature points for virtual casing integral.
+                Defaults to 1024.
+        """
+        self.stel = stel
+        self.r = r
+        self.ntheta = ntheta
+        self.nphi = nphi
+        Optimizable.__init__(self, depends_on=[stel])
+
+    def obj(self):
+        """Compute the objective function.
+
+        Returns:
+            tensor: float tensor with objective function value.
+        """
+        # gradB terms
+        gradB = self.stel.grad_B_tensor_cartesian(vacuum_component=True) # (3, 3, n)
+        gradB_ext = self.stel.grad_B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi, vacuum_component=True) # (3, 3, n)
+        dl = torch.clone(self.stel.d_l)
+        top = torch.sum(torch.sum((gradB_ext - gradB)**2, dim=(0,1)) * dl) # scalar tensor
+        bot = torch.sum(torch.sum(gradB**2, dim=(0,1)) * dl)
+        loss = top / bot
+
+        return loss
+    
+    def dobj(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            Derivative: Simsopt Derivative object.
+        """
+        # compute derivative
+        loss = self.obj()
+        dloss_by_ddofs = self.stel.total_derivative(loss) # list
+
+        # make a derivative object
+        derivs_axis = np.zeros(0)
+        for g in dloss_by_ddofs:
+            derivs_axis = np.append(derivs_axis, g.detach().numpy())
+
+        dJ_by_daxis = Derivative({self.stel: derivs_axis})
+        return dJ_by_daxis
+    
+    def J(self):
+        """Compute the objective function, returning a float.
+
+        Returns:
+            float: objective function value.
+        """
+        return self.obj().detach().numpy().item()
+    
+    @derivative_dec
+    def dJ(self):
+        """Compute the gradient of the objective function.
+
+        Returns:
+            array: gradient of the objective function as an np arrray.
+        """
+        return self.dobj()
+    

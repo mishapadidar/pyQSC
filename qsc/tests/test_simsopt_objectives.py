@@ -1051,6 +1051,46 @@ def test_CoilMagneticEnergy():
         # vacuum component of nonvac field should match the total vacuum solution
         assert np.allclose(fe.J(), fe_vac.J(), atol=1e-14), "Vacuum J() mismatch between nonvac and vac case"
 
+
+def test_VirtualCasingFieldConsistency():
+    """
+    Test the VirtualCasingFieldConsistency class.
+    """
+    from qsc.simsopt_objectives import VirtualCasingFieldConsistency
+
+    # test that the objective does not depend on p2, I2
+    names = ["precise QH", "precise QA", "2022 QH nfp3 beta"]
+    for name in names:
+        stel = QscOptimizable.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = QscOptimizable.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+
+        fe = VirtualCasingFieldConsistency(stel, r=0.01)
+        fe_vac = VirtualCasingFieldConsistency(stel_vac, r=0.01)
+        J = fe.J()
+        J_vac = fe_vac.J()
+        print(J- J_vac)
+        np.testing.assert_allclose(J, J_vac, atol=1e-14, err_msg="VirtualCasingFieldConsistency J() mismatch between nonvac and vac case")
+
+def test_VirtualCasingGradientConsistency():
+    """
+    Test the VirtualCasingGradientConsistency class.
+    """
+    from qsc.simsopt_objectives import VirtualCasingGradientConsistency
+
+    # test that the objective does not depend on p2, I2
+    names = ["precise QH", "precise QA", "2022 QH nfp3 beta"]
+    for name in names:
+        stel = QscOptimizable.from_paper(name, I2 = 1.0, p2=-1e5, order='r3')
+        stel_vac = QscOptimizable.from_paper(name, I2 = 0.0, p2=0.0, order='r3')
+
+        fe = VirtualCasingGradientConsistency(stel, r=0.01)
+        fe_vac = VirtualCasingGradientConsistency(stel_vac, r=0.01)
+        J = fe.J()
+        J_vac = fe_vac.J()
+        print(J- J_vac)
+        np.testing.assert_allclose(J, J_vac, atol=1e-14, err_msg="VirtualCasingGradientConsistency J() mismatch between nonvac and vac case")
+
+
 if __name__ == "__main__":
     test_save_load()
     test_get_scale()
@@ -1074,3 +1114,5 @@ if __name__ == "__main__":
     test_ThetaCurvaturePenalty()
     test_SquaredFlux()
     test_CoilMagneticEnergy()
+    test_VirtualCasingFieldConsistency()
+    test_VirtualCasingGradientConsistency()
