@@ -105,7 +105,8 @@ def surface(self, r, ntheta=64, vacuum_component=False):
     n = self.normal_cartesian.T
     b = self.binormal_cartesian.T
 
-    theta = torch.tensor(np.linspace(0, 2 * torch.pi, ntheta, endpoint=False))
+    # theta = torch.tensor(np.linspace(0, 2 * np.pi, ntheta, endpoint=False))
+    theta =torch.linspace(0, 2 * torch.pi, ntheta+1)[:-1]
 
     # storage
     xyz = torch.zeros((self.nphi, ntheta, 3))
@@ -219,7 +220,8 @@ def dsurface_by_dvarphi(self, r, ntheta=64, vacuum_component=False):
             dZ3c3_untwisted_by_dvarphi = 0.0 # Z3c3 is hardcoded to zero in PyQSC
             dZ3s3_untwisted_by_dvarphi = 0.0 # Z3s3 is hardcoded to zero in PyQSC
 
-    theta = torch.tensor(np.linspace(0, 2 * torch.pi, ntheta, endpoint=False))
+    # theta = torch.tensor(np.linspace(0, 2 * torch.pi, ntheta, endpoint=False))
+    theta =torch.linspace(0, 2 * torch.pi, ntheta+1)[:-1]
 
     # storage
     xyz = torch.zeros((self.nphi, ntheta, 3))
@@ -295,7 +297,8 @@ def dsurface_by_dtheta(self, r, ntheta=64, vacuum_component=False):
     n = self.normal_cartesian.T
     b = self.binormal_cartesian.T
 
-    theta = torch.tensor(np.linspace(0, 2 * torch.pi, ntheta, endpoint=False))
+    # theta = torch.tensor(np.linspace(0, 2 * np.pi, ntheta, endpoint=False))
+    theta =torch.linspace(0, 2 * torch.pi, ntheta+1)[:-1]
 
     components = self._load_components(vacuum_component=vacuum_component)
 
@@ -354,7 +357,9 @@ def d2surface_by_dthetatheta(self, r, ntheta=64, vacuum_component=False):
     n = self.normal_cartesian.T
     b = self.binormal_cartesian.T
 
-    theta = torch.tensor(np.linspace(0, 2 * torch.pi, ntheta, endpoint=False))
+    # theta = torch.tensor(np.linspace(0, 2 * np.pi, ntheta, endpoint=False))
+    theta =torch.linspace(0, 2 * torch.pi, ntheta+1)[:-1]
+
 
     components = self._load_components(vacuum_component=vacuum_component)
 
@@ -417,7 +422,8 @@ def dsurface_by_dr(self, r, ntheta=64, vacuum_component=False):
     n = self.normal_cartesian.T
     b = self.binormal_cartesian.T
 
-    theta = torch.tensor(np.linspace(0, 2 * torch.pi, ntheta, endpoint=False))
+    # theta = torch.tensor(np.linspace(0, 2 * np.pi, ntheta, endpoint=False))
+    theta =torch.linspace(0, 2 * torch.pi, ntheta+1)[:-1]
 
     components = self._load_components(vacuum_component=vacuum_component)
 
