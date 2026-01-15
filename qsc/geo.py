@@ -528,7 +528,7 @@ def surface_area_element(self, r, ntheta=64, vacuum_component=False):
     """
     normal = self.surface_normal(r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
     dA = torch.linalg.norm(normal, dim=-1) # (nphi, ntheta)
-    return dA
+    return torch.clone(dA)
 
 @lru_cache(maxsize=8)
 def surface_area(self, r, ntheta=64, vacuum_component=False):

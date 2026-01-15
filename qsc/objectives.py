@@ -117,52 +117,6 @@ def subsample_axis_nodes(self, ntarget):
 
     return xyz, d_l_d_phi, idx
 
-def B_external_on_axis_mse(self, B_target, r, ntheta=256, nphi=1024):
-    '''
-    Integrated mean-squared error between the Cartesian external magnetic field on axis
-    and a target magnetic field over the magnetic axis,
-            Loss = (1/2) int |B - B_target|**2 dl
-    B is computed by the virtual casing integral by integrating over a surface of
-    radius r.
-
-    Args:
-        B_target (tensor): (3, n) tensor of target magnetic field values.
-        r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points for virtual casing integral. Defaults to 256.
-        nphi (int, optional): number of phi quadrature points for virtual casing integral. Defaults to 1024.
-
-    Returns:
-        (tensor): (1,) Loss value as a scalar tensor.
-    '''
-    Bext_vc = self.B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi) # (3, n)
-    # dl = self.d_l_d_phi * self.d_phi # (nphi,)
-    dl = torch.clone(self.d_l)
-    loss = 0.5 * torch.sum(torch.sum((Bext_vc - B_target)**2, dim=0) * dl) # scalar tensor
-    return loss
-
-def grad_B_external_on_axis_mse(self, grad_B_target, r, ntheta=256, nphi=1024):
-    '''
-    Integrated mean-squared error between the gradient of the Cartesian external magnetic field on axis
-    and a target gradient field over the magnetic axis,
-            Loss = (1/2) int |grad_B_external - grad_B_target|**2 dl
-    grad_B_external is computed by the virtual casing integral by integrating over a surface of
-    radius r.
-
-    Args:
-        grad_B_target (tensor): (3, 3, n) tensor of target magnetic field values.
-        r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points for virtual casing integral. Defaults to 256.
-        nphi (int, optional): number of phi quadrature points for virtual casing integral. Defaults to 1024.
-
-    Returns:
-        (tensor): (1,) Loss value as a scalar tensor.
-    '''
-    grad_Bext = self.grad_B_external_on_axis(r=r, ntheta=ntheta, nphi=nphi) # (3, 3, n)
-    # dl = self.d_l_d_phi * self.d_phi # (nphi,)
-    dl = torch.clone(self.d_l)
-    loss = 0.5 * torch.sum(torch.sum((grad_Bext - grad_B_target)**2, dim=(0,1)) * dl) # scalar tensor
-    return loss
-
 def total_derivative(self, loss):
     """Get the total derivative of a loss function with respect to the DOFs.
     The derivative of loss(sigma, iota, sigma_vac, iota_vac) with respect to the DOFS, x, is
@@ -248,6 +202,7 @@ def surface_integral(self, X, r, vacuum_component=False):
     assert nphi == self.nphi, f"X.shape[0] = {nphi} does not match nphi = {self.nphi}"
     dphi = 2 * torch.pi / self.nfp / nphi
     dtheta = 2 * torch.pi / ntheta
-    dA = self.surface_area_element(r=r, ntheta=ntheta, vacuum_component=vacuum_component) *  self.d_varphi_d_phi[:, None] # (nphi, ntheta)
+    dA = torch.clone(self.surface_area_element(r=r, ntheta=ntheta, vacuum_component=vacuum_component))
+    dA = dA *  torch.clone(self.d_varphi_d_phi)[:, None] # (nphi, ntheta)
     integral = self.nfp * torch.sum(X * dA * dphi * dtheta)  # scalar tensor
     return integral

@@ -12,6 +12,7 @@ from qsc.util import finite_difference
 
 def test_save_load():
     """Test saving and loading a QscOptimizable object with Simsopt."""
+    print("Testing QscOptimizable save and load...")
     from simsopt._core import save, load
 
     # stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=71, sG=-1, spsi=-1, B0 = 2)
@@ -33,7 +34,7 @@ def test_save_load():
 
 def test_get_scale():
     """ Test the get_scale() method of QscOptimizable."""
-
+    print("Testing QscOptimizable.get_scale()...")
     # default case
     stel = QscOptimizable(rc=[1, 0], zs=[0, 0], order='r1', nphi=17)
     scale = stel.get_scale()
@@ -54,7 +55,7 @@ def test_FieldError():
     """
     The the FieldError class.
     """
-
+    print("Testing FieldError...")
     # configuration parameters
     ncoils = 4
     nfp = 2
@@ -138,7 +139,7 @@ def test_GradFieldError():
     """
     The the FieldError class.
     """
-
+    print("Testing GradFieldError...")
     # configuration parameters
     ncoils = 4
     nfp = 2
@@ -223,7 +224,7 @@ def test_ExternalFieldError():
     """
     Test the ExternalFieldError class.
     """
-
+    print("Testing ExternalFieldError...")
     # configuration parameters
     ncoils = 4
     nfp = 2
@@ -318,7 +319,7 @@ def test_GradExternalFieldError():
     """
     Test the GradExternalFieldError class.
     """
-
+    print("Testing GradExternalFieldError...")
     # configuration parameters
     ncoils = 2
     nfp = 2
@@ -407,6 +408,7 @@ def test_ExternalFieldErrorOnSurface():
     """
     Test the ExternalFieldErrorOnSurface class.
     """
+    print("Testing ExternalFieldErrorOnSurface...")
     from qsc.simsopt_objectives import ExternalFieldErrorOnSurface
     # configuration parameters
     ncoils = 4
@@ -511,7 +513,8 @@ def test_ExternalFieldErrorOnSurface():
 
 
 def test_IotaPenalty():
-        # set up the expansion
+    print("Testing IotaPenalty...")
+    # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=511)
     ip = IotaPenalty(stel, 0.6)
     stel.unfix_all()
@@ -531,6 +534,7 @@ def test_IotaPenalty():
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
 def test_Iota():
+    print("Testing Iota...")
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=511)
     ip = Iota(stel)
@@ -553,6 +557,7 @@ def test_Iota():
 
 
 def test_AxisLengthPenalty():
+    print("Testing AxisLengthPenalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=99)
     ip = AxisLengthPenalty(stel, 1.221)
@@ -573,6 +578,7 @@ def test_AxisLengthPenalty():
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
 def test_AxisLength():
+    print("Testing AxisLength...")
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r1', nphi=511)
     ip = AxisLength(stel)
@@ -594,6 +600,7 @@ def test_AxisLength():
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
 def test_GradBPenalty():
+    print("Testing GradBPenalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r2', nphi=99)
     ip = GradBPenalty(stel)
@@ -614,6 +621,7 @@ def test_GradBPenalty():
     assert err < 1e-5, "FAIL: GradBPenalty derivatives are incorrect"
 
 def test_GradGradBPenalty():
+    print("Testing GradGradBPenalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r2', nphi=131)
     ip = GradGradBPenalty(stel)
@@ -647,6 +655,7 @@ def test_GradGradBPenalty():
     assert np.abs(slope - 2) < 1e-3, "FAIL: GradGradBPenalty derivatives are incorrect"
 
 def test_B20Penalty():
+    print("Testing B20Penalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("2022 QH nfp3 beta", order='r2', nphi=99)
     ip = B20Penalty(stel)
@@ -667,6 +676,7 @@ def test_B20Penalty():
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
 def test_MagneticWellPenalty():
+    print("Testing MagneticWellPenalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r2', nphi=99)
     ip = MagneticWellPenalty(stel, well_target=-100)
@@ -687,6 +697,7 @@ def test_MagneticWellPenalty():
     assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
 
 def test_AxisArcLengthVariationPenalty():
+    print("Testing AxisArcLengthVariationPenalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r2', nphi=99)
     ip = AxisArcLengthVariation(stel)
@@ -707,6 +718,7 @@ def test_AxisArcLengthVariationPenalty():
     assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
 
 def test_SurfaceSelfIntersectionPenalty():
+    print("Testing SurfaceSelfIntersectionPenalty...")
     # use larger |p2| so that the surface is self-intersecting
     stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1.8e6, nphi=99)
     r = 0.1
@@ -728,6 +740,7 @@ def test_SurfaceSelfIntersectionPenalty():
     assert err < 1e-4, "FAIL: qsc derivatives are incorrect"
 
 def test_PressurePenalty():
+    print("Testing PressurePenalty...")
     # set up the expansion
     stel = QscOptimizable.from_paper("precise QA", order='r2', p2=-1e5, nphi=99)
     ip = PressurePenalty(stel, -1e6)
@@ -748,10 +761,10 @@ def test_PressurePenalty():
     assert err < 1e-5, "FAIL: qsc derivatives are incorrect"
 
 def test_CurveAxisDistancePenalty():
-
     """
     The the CurveAxisDistancePenalty class.
     """
+    print("Testing CurveAxisDistancePenalty...")
 
     # configuration parameters
     ncoils = 2
@@ -848,7 +861,7 @@ def test_CurveAxisDistancePenalty():
 
 def test_ThetaCurvaturePenalty():
     """ Test the ThetaCurvaturePenalty class"""
-
+    print("Testing ThetaCurvaturePenalty...")
     # # test the objective value for elliptic cross sections
     # minor_radius = 0.1
     # ntheta = 32
@@ -889,7 +902,7 @@ def test_SquaredFlux():
     """
     Test the SquaredFlux class.
     """
-
+    print("Testing SquaredFlux...")
     # configuration parameters
     ncoils = 4
     nfp = 2
@@ -972,6 +985,7 @@ def test_CoilMagneticEnergy():
     """
     Test the CoilMagneticEnergy class.
     """
+    print("Testing CoilMagneticEnergy...")
     from qsc.simsopt_objectives import CoilMagneticEnergy
 
     # configuration parameters
@@ -1056,6 +1070,7 @@ def test_VirtualCasingFieldConsistency():
     """
     Test the VirtualCasingFieldConsistency class.
     """
+    print("Testing VirtualCasingFieldConsistency...")
     from qsc.simsopt_objectives import VirtualCasingFieldConsistency
 
     # test that the objective does not depend on p2, I2
@@ -1075,6 +1090,7 @@ def test_VirtualCasingGradientConsistency():
     """
     Test the VirtualCasingGradientConsistency class.
     """
+    print("Testing VirtualCasingGradientConsistency...")
     from qsc.simsopt_objectives import VirtualCasingGradientConsistency
 
     # test that the objective does not depend on p2, I2

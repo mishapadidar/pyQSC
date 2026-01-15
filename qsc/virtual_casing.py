@@ -151,46 +151,6 @@ def B_taylor(self, r, ntheta=64, vacuum_component=False):
 
     return B_surf
 
-def B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
-    """Compute B_external on the magnetic axis using the virtual casing principle. If the
-    configuration is in vacuum, the vacuum solution is returned.
-
-    Args:
-        r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
-        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
-
-    Returns:
-        (tensor): (3, n) tensor of evaluations of B_external.
-    """
-
-    if (self.p2 == 0.0) and (self.I2 == 0.0):
-        # in vacuum, return vacuum solution
-        return self.Bfield_cartesian()
-    else:
-        # return self.B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
-        return self.B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
-    
-def grad_B_external_on_axis(self, r=0.1, ntheta=256, nphi=1024):
-    """Compute grad_B_external on the magnetic axis using the virtual casing principle. If the
-    configuration is in vacuum, the vacuum solution is returned.
-
-    Args:
-        r (float): radius of flux surface
-        ntheta (int, optional): number of theta quadrature points. Defaults to 256.
-        nphi (int, optional): number of phi quadrature points. Defaults to 1024.
-
-    Returns:
-        (tensor): (3, 3, n) tensor of evaluations of grad_B_external.
-    """
-
-    if (self.p2 == 0.0) and (self.I2 == 0.0):
-        # in vacuum, return vacuum solution
-        return self.grad_B_tensor_cartesian()
-    else:
-        # return self.grad_B_external_on_axis_taylor(r=r, ntheta=ntheta, nphi=nphi)
-        return self.grad_B_external_on_axis_corrected(r=r, ntheta=ntheta, nphi=nphi)
-        
 @lru_cache(maxsize=8)
 def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], vacuum_component=False):
     """Compute B_external on the magnetic axis using the virtual casing principle,
@@ -486,6 +446,9 @@ def B_external_on_axis_corrected(self, r=0.1, ntheta=256, nphi=1024):
     Returns:
         (tensor): (3, nphi) tensor of evaluations of B_external on the magnetic axis nodes.
     """
+    if (self.p2 == 0.0) and (self.I2 == 0.0):
+        # in vacuum, return vacuum solution
+        return self.Bfield_cartesian()
     Bvac = self.Bfield_cartesian() # (3, nphi)
     Bext = B_external_on_axis_taylor(self, r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
     Bext_vac = B_external_on_axis_taylor(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=True) # (3, nphi)
@@ -507,6 +470,9 @@ def grad_B_external_on_axis_corrected(self, r=0.1, ntheta=256, nphi=1024):
         (tensor): (3, 3, n) tensor of evaluations of B_external. 
             The gradient is a symmetric matrix at each target point.
     """
+    if (self.p2 == 0.0) and (self.I2 == 0.0):
+        # in vacuum, return vacuum solution
+        return self.grad_B_tensor_cartesian()
     # compute Bext using Taylor expansion
     gradB_ext = B_external_on_axis_taylor(self, r=r, ntheta=ntheta, nphi=nphi) # (3, nphi)
     # compute correction terms

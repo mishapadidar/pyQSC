@@ -522,9 +522,9 @@ def test_B_taylor():
         # vacuum component of nonvac field should match the total vacuum solution
         assert torch.allclose(B_vac_stel, B_stel_vac, atol=1e-14), "Vacuum B_taylor mismatch between nonvac and vac case"
 
-def test_B_external_on_axis():
+def test_B_external_on_axis_corrected():
     """
-    Test the accuracy of the B_external_on_axis method.
+    Test the accuracy of the B_external_on_axis_corrected method.
     """
 
     ntheta = 32
@@ -534,33 +534,15 @@ def test_B_external_on_axis():
     # method should be exact in vacuum
     stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=0.0, order='r3')
     with torch.no_grad():
-        Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
+        Bext_vc = stel.B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
     Bext = stel.Bfield_cartesian() # (3, nphi)
     err = Bext - Bext_vc
     print(torch.max(torch.abs(err)).detach().numpy())
-    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis does not match Bfield_cartesian in vacuum"
+    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis_corrected does not match Bfield_cartesian in vacuum"
 
-    # method should match B_external_on_axis_corrected in non-vacuum
-    stel = Qsc.from_paper("precise QA", nphi=61, p2=-1e1, I2=0.0, order='r3')
-    with torch.no_grad():
-        Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        Bext_corrected = stel.B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-    err = Bext_corrected - Bext_vc
-    print(torch.max(torch.abs(err)).detach().numpy())
-    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
-
-    # method should match B_external_on_axis_corrected in non-vacuum
-    stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=-1e-3, order='r3')
-    with torch.no_grad():
-        Bext_vc = stel.B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-        Bext_corrected = stel.B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi) # (3, nphi)
-    err = Bext_corrected - Bext_vc
-    print(torch.max(torch.abs(err)).detach().numpy())
-    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
-
-def test_grad_B_external_on_axis():
+def test_grad_B_external_on_axis_corrected():
     """
-    Test the accuracy of the grad_B_external_on_axis method.
+    Test the accuracy of the grad_B_external_on_axis_corrected method.
     """
 
     ntheta = 32
@@ -570,30 +552,11 @@ def test_grad_B_external_on_axis():
     # method should be exact in vacuum
     stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=0.0, order='r3')
     with torch.no_grad():
-        Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
+        Bext_vc = stel.grad_B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
     Bext = stel.grad_B_tensor_cartesian() # (3, 3, nphi)
     err = Bext - Bext_vc
     print(torch.max(torch.abs(err)).detach().numpy())
-    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis does not match Bfield_cartesian in vacuum"
-
-    # method should match grad_Bext_taylor in non-vacuum
-    stel = Qsc.from_paper("precise QA", nphi=61, p2=-1e1, I2=0.0, order='r3')
-    with torch.no_grad():
-        Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-        Bext_corrected = stel.grad_B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-    err = Bext_corrected - Bext_vc
-    print(torch.max(torch.abs(err)).detach().numpy())
-    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
-
-    # method should match Bext_taylor in non-vacuum
-    stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=-1e-3, order='r3')
-    with torch.no_grad():
-        Bext_vc = stel.grad_B_external_on_axis(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-        Bext_corrected = stel.grad_B_external_on_axis_corrected(r=mr, ntheta=ntheta, nphi=nphi)  # (3, 3, nphi)
-    err = Bext_corrected - Bext_vc
-    print(torch.max(torch.abs(err)).detach().numpy())
-    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis does not match B_external_on_axis_taylor in non-vacuum"
-
+    assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis_corrected does not match Bfield_cartesian in vacuum"
 
 if __name__ == "__main__":
     test_B_external_on_axis_taylor()
@@ -606,5 +569,5 @@ if __name__ == "__main__":
     test_B_taylor_autodiff()
     test_div_and_curl()
     test_B_taylor()
-    test_B_external_on_axis()
-    test_grad_B_external_on_axis()
+    test_B_external_on_axis_corrected()
+    test_grad_B_external_on_axis_corrected()

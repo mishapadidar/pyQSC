@@ -257,15 +257,9 @@ class GradFieldError(Optimizable):
             with respect to the BiotSavart and Qsc DOFs.
         """
         # Qsc field
-        # X_target, d_l_d_phi = self.qsc.downsample_axis(nphi=self.ntarget) # (3, ntarget), (ntarget)
-        # grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi,
-                                                    #   X_target = X_target.T)
-        # grad_B_qsc = grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
         grad_B_qsc = self.qsc.grad_B_tensor_cartesian().detach().numpy().T # (ntarget, 3, 3)
 
         # coil field
-        # X_target_np = X_target.detach().numpy().T # (ntarget, 3)
-        # X_target_np = np.ascontiguousarray(X_target_np) # (ntarget, 3)
         xyz = np.ascontiguousarray(self.qsc.XYZ0.detach().numpy().T) # (nphi, 3)
         self.bs.set_points(xyz)
         # self.bs.set_points(X_target_np)
@@ -275,11 +269,6 @@ class GradFieldError(Optimizable):
         dphi = np.diff(self.qsc.phi)[0]
         d_l_d_phi = self.qsc.d_l_d_phi
         dl = (d_l_d_phi * dphi).detach().numpy().reshape((-1,1,1)) # (nphi, 1)
-
-        # compute dl
-        # dphi = np.diff(self.qsc.phi)[0]
-        # dphi = (2 * np.pi / self.qsc.nfp) / self.ntarget
-        # dl = d_l_d_phi.detach().numpy().reshape((-1,1,1)) * dphi
 
         # derivative with respect to biot savart dofs
         v = np.ones(3)
@@ -333,7 +322,7 @@ class GradFieldError(Optimizable):
         return self.dfield_error()
 
 class ExternalFieldError(Optimizable):
-    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
+    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, method='corrected'):
         """Integrated mean-squared error between the Cartesian external magnetic field on axis
         and a target magnetic field over the magnetic axis,
                 Loss = (1/2) int |B_ext - B_coil|**2 dl / int B0^2 dl
@@ -348,12 +337,16 @@ class ExternalFieldError(Optimizable):
                 Defaults to 256.
             nphi (int, optional): Number of phi quadrature points for virtual casing integral.
                 Defaults to 1024.
+            method (str, optional): 'corrected' or 'taylor'. Method for virtual casing integral. 'taylor' uses the near axis virtual
+                casing principle to compute B_external, whereas 'corrected' employs the bias-corrected approach. Defaults to 'corrected'.
         """
         self.bs = bs
         self.qsc = qsc
         self.r = r
         self.ntheta = ntheta
         self.nphi = nphi
+        assert method in ['corrected', 'taylor'], "method should be one of 'corrected' or 'taylor'"
+        self.method = method
         self.need_to_run_code = True
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
@@ -384,15 +377,26 @@ class ExternalFieldError(Optimizable):
 
         self.bs.set_points(X_target_np)
         B_coil = self.bs.B().T # (3, n)
-        
+
         # compute loss
-        top = self.qsc.B_external_on_axis_mse(torch.tensor(B_coil), r=self.r, ntheta=self.ntheta, nphi = self.nphi)
+        if self.method == 'corrected':
+            B_qsc = self.qsc.B_external_on_axis_corrected(r=self.r, ntheta=self.ntheta, nphi=self.nphi) # (3, n)
+        else:
+            B_qsc = self.qsc.B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi) # (3, n)
+
+        dl = torch.clone(self.qsc.d_l)
+        top = 0.5 * torch.sum(torch.sum((B_qsc - torch.tensor(B_coil))**2, dim=0) * dl) # scalar tensor
         bottom = self.qsc.B0**2 * self.qsc.axis_length
         loss = top / bottom
-        self.B_coil = B_coil.T # (n, 3)
+        
+        # compute loss
+        loss = top / bottom
         self.loss = loss
         self.top = top
         self.bottom = bottom
+        self.B_coil = B_coil.T # (ntarget, 3)
+        self.B_qsc = B_qsc.T # (ntarget, 3)
+        self.need_to_run_code = False
         self.need_to_run_code = False
         return loss
 
@@ -408,9 +412,8 @@ class ExternalFieldError(Optimizable):
         loss = torch.clone(self.field_error())
         bottom = torch.clone(self.bottom)
 
-        # Qsc field
-        B_qsc = self.qsc.B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi).T.detach().numpy() # (ntarget, 3)
-        B_coil = self.B_coil # (ntarget, 3)
+        B_qsc = torch.clone(self.B_qsc).detach().numpy() # (ntarget, 3)
+        B_coil = self.B_coil # numpy (ntarget, 3)
         dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1)) # (ntarget, 1)
         X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
         X_target_np = np.ascontiguousarray(X_target.detach().numpy().T) # (ntarget, 3)
@@ -472,7 +475,7 @@ class ExternalFieldError(Optimizable):
         return self.dfield_error()
 
 class GradExternalFieldError(Optimizable):
-    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024):
+    def __init__(self, bs, qsc, r, ntheta=256, nphi=1024, method='corrected'):
         """        Integrated mean-squared error between the gradient of the external magnetic field on axis
         and the gradient of the Biot Savart field over the magnetic axis,
                 Loss = (1/2) int |grad_B_external - grad_B_bs|**2 dl / int |grad_B_external|^2 dl
@@ -487,12 +490,16 @@ class GradExternalFieldError(Optimizable):
                 Defaults to 256.
             nphi (int, optional): Number of phi quadrature points for virtual casing integral.
                 Defaults to 1024.
+            method (str, optional): 'corrected' or 'taylor'. Method for virtual casing integral. 'taylor' uses the near axis virtual
+                casing principle to compute grad_B_external, whereas 'corrected' employs the bias-corrected approach. Defaults to 'corrected'.
         """
         self.bs = bs
         self.qsc = qsc
         self.r = r
         self.ntheta = ntheta
         self.nphi = nphi
+        assert method in ['corrected', 'taylor'], "method should be one of 'corrected' or 'taylor'"
+        self.method = method
         self.need_to_run_code = True
         Optimizable.__init__(self, depends_on=[bs, qsc])
 
@@ -522,9 +529,11 @@ class GradExternalFieldError(Optimizable):
         grad_B_coil = self.bs.dB_by_dX().T # (3, 3, ntarget)
 
         # compute loss
-        # loss = self.qsc.grad_B_external_on_axis_mse(torch.tensor(grad_B_coil), r=self.r,
-        #                                             ntheta=self.ntheta, nphi=self.nphi)
-        grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi) # (3, 3, n)
+        if self.method == 'corrected':
+            grad_B_qsc = self.qsc.grad_B_external_on_axis_corrected(r=self.r, ntheta=self.ntheta, nphi=self.nphi) # (3, 3, n)
+        else:
+            grad_B_qsc = self.qsc.grad_B_external_on_axis_taylor(r=self.r, ntheta=self.ntheta, nphi=self.nphi) # (3, 3, n)
+
         dl = torch.clone(self.qsc.d_l)
         top = 0.5 * torch.sum(torch.sum((grad_B_qsc - torch.tensor(grad_B_coil))**2, dim=(0,1)) * dl) # scalar tensor
         bottom = torch.sum(torch.sum(grad_B_qsc**2, dim=(0,1)) * dl) # scalar tensor
@@ -552,7 +561,7 @@ class GradExternalFieldError(Optimizable):
 
         # Qsc field
         # grad_B_qsc = self.qsc.grad_B_external_on_axis(r=self.r, ntheta=self.ntheta, nphi=self.nphi)
-        grad_B_qsc = self.grad_B_qsc.detach().numpy().T # (ntarget, 3, 3)
+        grad_B_qsc = torch.clone(self.grad_B_qsc).detach().numpy().T # (ntarget, 3, 3)
         grad_B_coil = self.grad_B_coil # (ntarget, 3, 3)
         dl = torch.clone(self.qsc.d_l).detach().numpy().reshape((-1,1,1)) # (ntarget, 1, 1)
         X_target = torch.clone(self.qsc.XYZ0) # (3, ntarget)
@@ -1895,11 +1904,11 @@ class CoilMagneticEnergy(Optimizable):
             return self.loss
         
         # evaluate coil field
-        xyz = self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        xyz = torch.clone(self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component)) # (nphi, ntheta, 3)
         xyz_np = xyz.detach().numpy().reshape((-1, 3)) # (nphi * ntheta, 3)
         xyz_np = np.ascontiguousarray(xyz_np) # (nphi, 3)
 
-        # compute B * normal
+        # compute B * B
         self.bs.set_points(xyz_np)
         B_coil = self.bs.B().reshape(self.stel.nphi, self.ntheta, 3) # (nphi, ntheta, 3)
         B_coil = torch.tensor(B_coil) # convert to tensor
@@ -1923,17 +1932,18 @@ class CoilMagneticEnergy(Optimizable):
 
         loss = torch.clone(self.loss)
 
-        xyz = self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component) # (nphi, ntheta, 3)
+        xyz = torch.clone(self.stel.surface(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component)) # (nphi, ntheta, 3)
         xyz_np = xyz.detach().numpy().reshape((-1, 3)) # (N, 3)
         xyz_np = np.ascontiguousarray(xyz_np) # (N, 3)
         self.bs.set_points(xyz_np)
         
         B_coil = self.bs.B().reshape((-1, self.ntheta, 3)) # (nphi, ntheta, 3)
 
-        dA = self.stel.surface_area_element(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component)[:, :, None] # (nphi, ntheta, 1)
+        dA = torch.clone(self.stel.surface_area_element(r=self.r, ntheta=self.ntheta, vacuum_component=self.vacuum_component))
+        dA = dA[:, :, None] # (nphi, ntheta, 1)
         dphi = 2 * np.pi / self.stel.nfp / self.stel.nphi
         dtheta = 2 * np.pi / self.ntheta
-        dA *= self.stel.d_varphi_d_phi[:, None, None] * dphi * dtheta # (nphi, ntheta, 1)
+        dA *= torch.clone(self.stel.d_varphi_d_phi)[:, None, None] * dphi * dtheta # (nphi, ntheta, 1)
         dA = dA.detach().numpy()
 
         # derivative with respect to biot savart dofs
