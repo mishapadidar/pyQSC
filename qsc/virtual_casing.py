@@ -179,7 +179,7 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], v
     n_target = len(X_target)
 
     # # interpolate
-    n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
+    n_cross_B_interp, gamma_surf_interp, n_dot_B_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
 
     dtheta = 2 * torch.pi / ntheta
     dphi = 2 * torch.pi / nphi
@@ -195,6 +195,9 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], v
 
         # cross product
         integrand = torch.linalg.cross(kernel, n_cross_B_interp, dim=-1) # (nphi, ntheta, 3)
+
+        # dot product
+        integrand = integrand - (kernel * n_dot_B_interp) # (nphi, ntheta, 3)
 
         integral =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand * dtheta * dphi, dim=(0,1)) # (3,)
 
@@ -381,15 +384,15 @@ def grad_B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=
     n_target = len(X_target)
 
     # interpolate
-    n_cross_B_interp, gamma_surf_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
+    n_cross_B_interp, gamma_surf_interp, n_dot_B_interp = build_virtual_casing_interpolants(self, r=r, ntheta=ntheta, nphi=nphi, vacuum_component=vacuum_component)
     
     # compute integral
-    B_ext = grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, ntheta, nphi)
+    B_ext = grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, n_dot_B_interp, ntheta, nphi)
 
     return B_ext
 
 @torch.compile
-def grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, ntheta, nphi):
+def grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, n_dot_B_interp, ntheta, nphi):
     """Evaluate the integral for grad_B_external_on_axis_taylor. This function has been separated
     to enable torch.compile. Compilation speeds up repeated integral evaluation, but may slow the first 
     evaluation.
@@ -424,6 +427,9 @@ def grad_B_external_integral(X_target, gamma_surf_interp, n_cross_B_interp, nthe
 
             # cross product
             integrand = torch.linalg.cross(dkernel_by_djj, n_cross_B_interp, dim=-1) # (nphi, ntheta, 3)
+
+            # dot product
+            integrand = integrand - (dkernel_by_djj * n_dot_B_interp) # (nphi, ntheta, 3)
 
             B_ext[:, jj, ii] =  (1.0 / (4 * torch.pi) ) * torch.sum(integrand *  dtheta * dphi, dim=(0,1)) # (3,)
     return B_ext
@@ -502,25 +508,31 @@ def build_virtual_casing_interpolants(self, r=0.1, ntheta=256, nphi=1024, vacuum
     g = self.surface(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
     b = self.B_taylor(r=r, ntheta=ntheta, vacuum_component=vacuum_component) # (nphi, ntheta, 3)
     nb = torch.linalg.cross(n, b) * dvarphi_by_dphi.reshape((-1,1,1))
+    ndb = torch.sum(n * b, axis=-1, keepdims=True) * dvarphi_by_dphi.reshape((-1,1,1))
 
     # map out full torus
     gamma_surf = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
     n_cross_B = torch.zeros((int(self.nfp * self.nphi), ntheta, 3))
+    n_dot_B = torch.zeros((int(self.nfp * self.nphi), ntheta, 1))
     gamma_surf[ : self.nphi] = g
     n_cross_B[ : self.nphi] = nb
+    n_dot_B[ : self.nphi] = ndb
     for ii in range(1, self.nfp):
         g = rotate_nfp(g, 1, self.nfp)
         gamma_surf[ii * self.nphi : (ii+1) * self.nphi] = g
         nb = rotate_nfp(nb, 1, self.nfp)
         n_cross_B[ii * self.nphi : (ii+1) * self.nphi] = nb
+        # n dot B is scalar, so no rotation needed
+        n_dot_B[ii * self.nphi : (ii+1) * self.nphi] = ndb
 
     # interpolate only in phi
     period = 2 * torch.pi
     points = torch.linspace(0, period, nphi+1)[:-1] # linspace(..., endpoint=False)
     n_cross_B_interp = fourier_interp1d(n_cross_B, points, period = period, dim=0) # (nphi, ntheta, 3)
     gamma_surf_interp = fourier_interp1d(gamma_surf, points, period = period, dim=0) # (nphi, ntheta, 3)
+    n_dot_B_interp = fourier_interp1d(n_dot_B, points, period = period, dim=0) # (nphi, ntheta, 1)
 
-    return n_cross_B_interp, gamma_surf_interp
+    return n_cross_B_interp, gamma_surf_interp, n_dot_B_interp
 
 @lru_cache(maxsize=8)
 def build_virtual_casing_grid(self, r=0.1, ntheta=256, vacuum_component=False):
