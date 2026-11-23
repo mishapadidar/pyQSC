@@ -71,7 +71,7 @@ def _load_components(self, vacuum_component=False):
         suffix = '_untwisted'
 
     # TODO: does Struct need to be torch?
-    out = Struct
+    out = Struct()
     for v in variables:
         # TODO: do we need to torch.clone?
         s = 'self.'+ v + suffix
