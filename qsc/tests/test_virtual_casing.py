@@ -558,6 +558,26 @@ def test_grad_B_external_on_axis_corrected():
     print(torch.max(torch.abs(err)).detach().numpy())
     assert np.allclose(torch.max(torch.abs(err)).detach().numpy(), 0.0, 1e-14), "grad_B_external_on_axis_corrected does not match Bfield_cartesian in vacuum"
 
+def test_B_external_on_axis_analytic():
+    """
+    The analytic plasma field B_p = B_axis - B_ext is O(a^2), so its mismatch with the
+    bias-corrected virtual casing integral, relative to B_p, should vanish as O(a).
+    In vacuum B_p = 0.
+    """
+    stel = Qsc.from_paper("precise QA", nphi=61, p2=0.0, I2=0.0, order='r3')
+    assert torch.equal(stel.B_external_on_axis_analytic(r=0.1), stel.Bfield_cartesian())
+
+    stel = Qsc.from_paper("precise QA", nphi=61, p2=-1e5, I2=0.0, order='r3')
+    B_axis = stel.Bfield_cartesian()
+    errs = []
+    for a in [0.02, 0.04]:
+        with torch.no_grad():
+            B_p = B_axis - stel.B_external_on_axis_analytic(r=a)
+            B_p_vc = B_axis - stel.B_external_on_axis_corrected(r=a, ntheta=128, nphi=2048)
+        errs.append((torch.max(torch.abs(B_p - B_p_vc)) / torch.max(torch.abs(B_p))).item())
+    assert errs[0] < 5e-3
+    assert errs[1] / errs[0] > 2.0 # relative error decays at least linearly in a
+
 if __name__ == "__main__":
     test_B_external_on_axis_taylor()
     test_B_external_on_axis_taylor_singularity_subtraction()

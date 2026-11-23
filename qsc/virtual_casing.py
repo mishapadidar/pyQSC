@@ -8,7 +8,7 @@ import logging
 import numpy as np
 from functools import lru_cache
 import torch
-from .util import rotate_nfp
+from .util import rotate_nfp, mu0
 from .fourier_tools import fourier_interp1d
 from torch.special import erf
 
@@ -206,6 +206,34 @@ def B_external_on_axis_taylor(self, r=0.1, ntheta=256, nphi=1024, X_target=[], v
     B_ext = torch.stack([B_ext_of_phi(ii) for ii in range(n_target)]).T
 
     return B_ext
+
+def B_external_on_axis_analytic(self, r=0.1):
+    r"""Compute B_external on the magnetic axis analytically, B_ext = B_axis - B_p, where B_p is the
+    leading-order field of the plasma currents inside the surface of radius r on the axis
+    (R. Jorge, private communication),
+
+    .. math::
+        \mathbf{B}_p = c_p r^2 \left[s_G \mathbf{t} + \frac{2 \ell' \bar\eta x}{\iota_N D}
+            \left(s_G \sigma \mathbf{n} - s_\psi (1 + x^2) \mathbf{b}\right)\right],
+
+    with :math:`c_p = \mu_0 p_2 / B_0`, :math:`x = \bar\eta / \kappa`, :math:`D = (1 + x^2)^2 + \sigma^2`,
+    and :math:`\ell' = d\ell/d\varphi`. Valid for I2 = 0; neglects O(r^3) terms.
+
+    Args:
+        r (float): radius of the flux surface bounding the plasma [m].
+
+    Returns:
+        (tensor): (3, nphi) tensor of evaluations of B_external on the magnetic axis [T].
+    """
+    x = self.etabar / self.curvature # (nphi,)
+    D = (1 + x**2)**2 + self.sigma**2 # (nphi,)
+    c_p = mu0 * self.p2 / self.B0
+    coeff = 2 * self.d_l_d_varphi * self.etabar * x / (self.iotaN * D) # (nphi,)
+    t = self.tangent_cartesian.T # (3, nphi)
+    n = self.normal_cartesian.T
+    b = self.binormal_cartesian.T
+    B_p = c_p * r**2 * (self.sG * t + coeff * (self.sG * self.sigma * n - self.spsi * (1 + x**2) * b))
+    return self.Bfield_cartesian() - B_p
 
 @lru_cache(maxsize=8)
 def B_external_on_axis_taylor_singularity_subtraction(self, r=0.1, ntheta=256, n_intervals=30, vacuum_component=False):

@@ -44,6 +44,7 @@ class Qsc(torch.nn.Module):
     from .util import B_mag
     from .virtual_casing import (B_taylor,
                                  B_external_on_axis_taylor,
+                                 B_external_on_axis_analytic,
                                  B_external_on_axis_taylor_singularity_subtraction,
                                  grad_B_external_on_axis_taylor,
                                  B_external_on_axis_corrected,
